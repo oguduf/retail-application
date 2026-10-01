@@ -19,7 +19,8 @@ env:
   ENVIRONMENT: ${{ vars.ENVIRONMENT }}
   ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
   DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
-  IMAGE_TAG: ${{ github.sha }}-${{ github.run_attempt }}
+  # Include the workflow run ID so a fresh dispatch of the same commit gets a new immutable ECR tag.
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   deploy:
