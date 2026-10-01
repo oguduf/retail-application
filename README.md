@@ -52,6 +52,12 @@ kubectl port-forward -n coffee-store service/frontend 8081:80
 
 Open <http://localhost:8081>. Keep the port-forward command running while using the app; `Ctrl+C` stops only that forwarding process. The Kubernetes PVCs use Docker Desktop's local-path `standard` StorageClass. This is suitable for a local lab, not durable production storage or multi-node database availability; production should use managed databases and an appropriate backup/recovery plan.
 
+## AWS development deployment
+
+The AWS deployment is separate from the Docker Desktop manifests. It builds and pushes all five images to the existing ECR repositories and deploys them to the existing EKS cluster when the `Build and deploy Coffee Store to EKS` workflow is manually run. Configure the repository variables `AWS_REGION`, `AWS_ROLE_ARN`, `EKS_CLUSTER_NAME`, `PROJECT_NAME`, and `ENVIRONMENT` first. The AWS role must trust this repository's GitHub Actions OIDC subject and allow ECR image pushes, `eks:DescribeCluster`, and Kubernetes access to the `coffee-store` namespace.
+
+The AWS manifests use the EKS EBS CSI add-on and encrypted `gp3` EBS volumes for the three SQLite-backed services. Each stateful service stays at one replica and uses a `Recreate` rollout to avoid concurrent attachment of a single-writer volume. The Ingress creates a public HTTP Application Load Balancer through the AWS Load Balancer Controller; HTTPS and domain routing are intentionally a later step. These settings are a development/lab deployment, not a highly available production data architecture: EBS volumes are zonal, SQLite is single-writer, and volume snapshots/backups are not configured here.
+
 ## Local request flow
 
 ```text

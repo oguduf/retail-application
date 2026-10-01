@@ -1,0 +1,106 @@
+name: Build and deploy Coffee Store to EKS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: coffee-store-aws-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+  ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_attempt }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out application repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT; do
+            if [ -z "${!name}" ]; then
+              echo "Missing repository variable: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run product catalog tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/product/requirements-dev.txt
+
+      - name: Install test dependencies and run tests
+        working-directory: services/product
+        run: |
+          python -m pip install --requirement requirements-dev.txt
+          python -m pytest --quiet
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: RoastRelayCoffeeStoreDeploy
+
+      - name: Build and push all five application images
+        shell: bash
+        run: |
+          registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+          for service in product inventory order notification frontend; do
+            case "$service" in
+              product) directory=services/product ;;
+              inventory) directory=services/inventory ;;
+              order) directory=services/orders ;;
+              notification) directory=services/notifications ;;
+              frontend) directory=frontend ;;
+            esac
+            image="${registry}/${PROJECT_NAME}-${ENVIRONMENT}-${service}:${IMAGE_TAG}"
+            docker build --tag "$image" "$directory"
+            docker push "$image"
+          done
+          echo "ECR_REGISTRY=$registry" >> "$GITHUB_ENV"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.1
+
+      - name: Connect to Amazon EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Apply AWS storage and application manifests
+        shell: bash
+        run: |
+          kubectl apply -f k8s/aws/00-namespace.yaml
+          kubectl apply -f k8s/aws/10-storage.yaml
+          sed \
+            -e "s|PRODUCT_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-product:${IMAGE_TAG}|g" \
+            -e "s|INVENTORY_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-inventory:${IMAGE_TAG}|g" \
+            -e "s|ORDER_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-order:${IMAGE_TAG}|g" \
+            -e "s|NOTIFICATION_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-notification:${IMAGE_TAG}|g" \
+            -e "s|FRONTEND_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-frontend:${IMAGE_TAG}|g" \
+            k8s/aws/20-application.yaml.tpl | kubectl apply -f -
+          kubectl apply -f k8s/aws/30-ingress.yaml
+
+      - name: Verify application rollouts
+        shell: bash
+        run: |
+          for deployment in product-service inventory-service order-service notification-service frontend; do
+            kubectl rollout status "deployment/${deployment}" --namespace coffee-store --timeout=5m
+          done
+          kubectl get pods,services,ingress --namespace coffee-store
