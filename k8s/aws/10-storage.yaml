@@ -1,0 +1,47 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: coffee-store-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inventory-data
+  namespace: coffee-store
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: coffee-store-gp3
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-data
+  namespace: coffee-store
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: coffee-store-gp3
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: notification-data
+  namespace: coffee-store
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: coffee-store-gp3
+  resources:
+    requests:
+      storage: 1Gi
