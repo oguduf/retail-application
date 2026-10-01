@@ -98,8 +98,8 @@ jobs:
             -e "s|FRONTEND_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-frontend:${IMAGE_TAG}|g" \
             k8s/aws/20-application.yaml.tpl | kubectl apply -f -
           sed \
-            -e "s|ACM_CERTIFICATE_ARN_PLACEHOLDER|${ACM_CERTIFICATE_ARN}|g" \
-            -e "s|DOMAIN_NAME_PLACEHOLDER|${DOMAIN_NAME}|g" \
+            -e "s#ACM_CERTIFICATE_ARN_PLACEHOLDER#${ACM_CERTIFICATE_ARN}#g" \
+            -e "s#DOMAIN_NAME_PLACEHOLDER#${DOMAIN_NAME}#g" \
             k8s/aws/30-ingress.yaml | kubectl apply -f -
 
       - name: Verify application rollouts
