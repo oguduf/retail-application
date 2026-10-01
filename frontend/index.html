@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f0e8" />
+    <title>Roast & Relay Coffee</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Roast and Relay home"><span class="brand-mark">R</span> Roast <span>&amp;</span> Relay</a>
+      <nav><a href="#coffee">Coffee</a><a href="#orders">Your orders</a></nav>
+      <span class="header-note">Small batches. Good mornings.</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">FRESHLY ROASTED · THOUGHTFULLY SOURCED</p>
+        <h1>A better cup<br />starts <em>here.</em></h1>
+        <p>Find your next favorite coffee, roasted in small batches and delivered with care.</p>
+        <a class="button button-dark" href="#coffee">Explore the roast</a>
+        <div class="hero-bean bean-one"></div><div class="hero-bean bean-two"></div>
+      </section>
+
+      <section id="coffee" class="section coffee-section">
+        <div class="section-heading"><div><p class="eyebrow">THE CURRENT MENU</p><h2>Shop our coffee</h2></div><p id="catalog-status" class="service-status">Loading coffee…</p></div>
+        <div id="product-grid" class="product-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="order-section">
+        <div class="order-copy"><p class="eyebrow">YOUR NEXT GOOD MORNING</p><h2>Place an order</h2><p>Choose a coffee above, set the quantity, and we’ll reserve it from current stock.</p></div>
+        <form id="order-form" class="order-form">
+          <label for="customer-name">Name</label>
+          <input id="customer-name" name="customer_name" autocomplete="name" required maxlength="100" placeholder="Your name" />
+          <label for="coffee-choice">Coffee</label>
+          <select id="coffee-choice" name="sku" required></select>
+          <label for="quantity">Bags</label>
+          <input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required />
+          <button class="button button-light" type="submit">Place order</button>
+          <p id="order-result" class="form-result" role="status"></p>
+        </form>
+      </section>
+
+      <section id="orders" class="section records-section">
+        <div class="section-heading"><div><p class="eyebrow">ORDER HISTORY</p><h2>Recent orders</h2></div><button id="refresh-orders" class="text-button" type="button">Refresh</button></div>
+        <div id="order-list" class="record-list"><p class="muted">Loading orders…</p></div>
+      </section>
+
+      <section class="section records-section notification-section">
+        <div class="section-heading"><div><p class="eyebrow">ORDER UPDATES</p><h2>Notifications</h2></div><span id="notification-status" class="service-status">Loading…</span></div>
+        <div id="notification-list" class="record-list"><p class="muted">Loading notifications…</p></div>
+      </section>
+    </main>
+
+    <footer><a class="brand" href="/"><span class="brand-mark">R</span> Roast <span>&amp;</span> Relay</a><p>Roasted with care. Built for your daily ritual.</p></footer>
+  </body>
+</html>

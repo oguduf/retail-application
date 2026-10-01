@@ -1,0 +1,71 @@
+services:
+  product-service:
+    build: ./services/product
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  inventory-service:
+    build: ./services/inventory
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/inventory.db
+    volumes:
+      - inventory-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  order-service:
+    build: ./services/orders
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/orders.db
+      CATALOG_URL: http://product-service:8000
+      INVENTORY_URL: http://inventory-service:8000
+      NOTIFICATIONS_URL: http://notification-service:8000
+    volumes:
+      - order-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  notification-service:
+    build: ./services/notifications
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/notifications.db
+    volumes:
+      - notification-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      product-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
+volumes:
+  inventory-data:
+  order-data:
+  notification-data:
