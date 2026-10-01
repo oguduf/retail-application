@@ -98,10 +98,7 @@ jobs:
             -e "s|NOTIFICATION_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-notification:${IMAGE_TAG}|g" \
             -e "s|FRONTEND_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-frontend:${IMAGE_TAG}|g" \
             k8s/aws/20-application.yaml.tpl | kubectl apply -f -
-          sed \
-            -e "s#ACM_CERTIFICATE_ARN_PLACEHOLDER#${ACM_CERTIFICATE_ARN}#g" \
-            -e "s#DOMAIN_NAME_PLACEHOLDER#${DOMAIN_NAME}#g" \
-            k8s/aws/30-ingress.yaml | kubectl apply -f -
+          python3 -c 'from pathlib import Path; import os; manifest = Path("k8s/aws/30-ingress.yaml").read_text(); manifest = manifest.replace("ACM_CERTIFICATE_ARN_PLACEHOLDER", os.environ["ACM_CERTIFICATE_ARN"]).replace("DOMAIN_NAME_PLACEHOLDER", os.environ["DOMAIN_NAME"]); print(manifest)' | kubectl apply -f -
 
       - name: Verify application rollouts
         shell: bash
