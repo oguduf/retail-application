@@ -1,0 +1,30 @@
+[
+  {
+    "sku": "ETHIOPIA-YIRGACHEFFE",
+    "name": "Ethiopia Yirgacheffe",
+    "price": 18.5,
+    "description": "Bright citrus and jasmine notes. Whole bean, 12 oz.",
+    "roast": "Light"
+  },
+  {
+    "sku": "COLOMBIA-HUILA",
+    "name": "Colombia Huila",
+    "price": 17.0,
+    "description": "Caramel sweetness with a smooth cocoa finish. Whole bean, 12 oz.",
+    "roast": "Medium"
+  },
+  {
+    "sku": "HOUSE-ESPRESSO",
+    "name": "House Espresso",
+    "price": 16.0,
+    "description": "A balanced blend made for espresso and milk drinks. Whole bean, 12 oz.",
+    "roast": "Dark"
+  },
+  {
+    "sku": "DECAF-COLOMBIA",
+    "name": "Decaf Colombia",
+    "price": 17.5,
+    "description": "Sugar cane decaffeinated with notes of toffee and orange. Whole bean, 12 oz.",
+    "roast": "Medium"
+  }
+]
