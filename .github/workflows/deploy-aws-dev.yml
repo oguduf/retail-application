@@ -17,6 +17,8 @@ env:
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   PROJECT_NAME: ${{ vars.PROJECT_NAME }}
   ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+  ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+  DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
   IMAGE_TAG: ${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
@@ -29,7 +31,7 @@ jobs:
       - name: Validate deployment configuration
         shell: bash
         run: |
-          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT; do
+          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT ACM_CERTIFICATE_ARN DOMAIN_NAME; do
             if [ -z "${!name}" ]; then
               echo "Missing repository variable: $name" >&2
               exit 1
@@ -95,7 +97,10 @@ jobs:
             -e "s|NOTIFICATION_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-notification:${IMAGE_TAG}|g" \
             -e "s|FRONTEND_IMAGE_PLACEHOLDER|${ECR_REGISTRY}/${PROJECT_NAME}-${ENVIRONMENT}-frontend:${IMAGE_TAG}|g" \
             k8s/aws/20-application.yaml.tpl | kubectl apply -f -
-          kubectl apply -f k8s/aws/30-ingress.yaml
+          sed \
+            -e "s|ACM_CERTIFICATE_ARN_PLACEHOLDER|${ACM_CERTIFICATE_ARN}|g" \
+            -e "s|DOMAIN_NAME_PLACEHOLDER|${DOMAIN_NAME}|g" \
+            k8s/aws/30-ingress.yaml | kubectl apply -f -
 
       - name: Verify application rollouts
         shell: bash
