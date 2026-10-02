@@ -1,3 +1,19 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-service
+  namespace: coffee-store
+  annotations:
+    eks.amazonaws.com/role-arn: ORDER_SERVICE_ROLE_ARN_PLACEHOLDER
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service
+  namespace: coffee-store
+  annotations:
+    eks.amazonaws.com/role-arn: NOTIFICATION_SERVICE_ROLE_ARN_PLACEHOLDER
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -107,6 +123,7 @@ spec:
       labels:
         app: order-service
     spec:
+      serviceAccountName: order-service
       containers:
         - name: order-service
           image: ORDER_IMAGE_PLACEHOLDER
@@ -117,7 +134,7 @@ spec:
             - {name: DATABASE_PATH, value: /data/orders.db}
             - {name: CATALOG_URL, value: http://product-service:8000}
             - {name: INVENTORY_URL, value: http://inventory-service:8000}
-            - {name: NOTIFICATIONS_URL, value: http://notification-service:8000}
+            - {name: EVENT_BUS_NAME, value: EVENT_BUS_NAME_PLACEHOLDER}
           volumeMounts:
             - {name: data, mountPath: /data}
           readinessProbe:
@@ -160,6 +177,7 @@ spec:
       labels:
         app: notification-service
     spec:
+      serviceAccountName: notification-service
       containers:
         - name: notification-service
           image: NOTIFICATION_IMAGE_PLACEHOLDER
@@ -168,6 +186,8 @@ spec:
             - {name: http, containerPort: 8000}
           env:
             - {name: DATABASE_PATH, value: /data/notifications.db}
+            - {name: SQS_QUEUE_URL, value: ORDER_NOTIFICATION_QUEUE_URL_PLACEHOLDER}
+            - {name: SNS_TOPIC_ARN, value: ORDER_NOTIFICATION_TOPIC_ARN_PLACEHOLDER}
           volumeMounts:
             - {name: data, mountPath: /data}
           readinessProbe:
