@@ -1,11 +1,15 @@
+import json
 import logging
 import os
 import sqlite3
+import threading
+import time
 import uuid
 from contextlib import closing
 from datetime import datetime, timezone
 
 import httpx
+import boto3
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -18,6 +22,9 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "/data/orders.db")
 CATALOG_URL = os.getenv("CATALOG_URL", "http://product-service:8000")
 INVENTORY_URL = os.getenv("INVENTORY_URL", "http://inventory-service:8000")
 NOTIFICATIONS_URL = os.getenv("NOTIFICATIONS_URL", "http://notification-service:8000")
+EVENT_BUS_NAME = os.getenv("EVENT_BUS_NAME", "")
+OUTBOX_POLL_SECONDS = float(os.getenv("OUTBOX_POLL_SECONDS", "5"))
+eventbridge = boto3.client("events") if EVENT_BUS_NAME else None
 
 
 class CreateOrderRequest(BaseModel):
@@ -47,10 +54,66 @@ def initialize_database():
                 created_at TEXT NOT NULL
             )"""
         )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS event_outbox (
+                event_id TEXT PRIMARY KEY,
+                detail_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                published_at TEXT
+            )"""
+        )
         connection.commit()
 
 
 initialize_database()
+
+
+def publish_pending_order_events():
+    if eventbridge is None:
+        return
+
+    with closing(connect()) as connection:
+        pending = connection.execute(
+            "SELECT event_id, detail_json FROM event_outbox WHERE published_at IS NULL ORDER BY created_at LIMIT 10"
+        ).fetchall()
+
+    for row in pending:
+        try:
+            response = eventbridge.put_events(
+                Entries=[{
+                    "Source": "retail.orders",
+                    "DetailType": "OrderCreated",
+                    "Detail": row["detail_json"],
+                    "EventBusName": EVENT_BUS_NAME,
+                }]
+            )
+            if response.get("FailedEntryCount", 0):
+                raise RuntimeError(response["Entries"][0].get("ErrorMessage", "EventBridge rejected the event"))
+
+            with closing(connect()) as connection:
+                connection.execute(
+                    "UPDATE event_outbox SET published_at = ? WHERE event_id = ? AND published_at IS NULL",
+                    (datetime.now(timezone.utc).isoformat(), row["event_id"]),
+                )
+                connection.commit()
+            logger.info("Published order event %s to EventBridge", row["event_id"])
+        except Exception:
+            logger.exception("Could not publish order event %s; it remains in the outbox for retry", row["event_id"])
+
+
+def run_outbox_publisher():
+    while True:
+        try:
+            publish_pending_order_events()
+        except Exception:
+            logger.exception("Unable to read or publish pending order events")
+        time.sleep(OUTBOX_POLL_SECONDS)
+
+
+@app.on_event("startup")
+def start_outbox_publisher():
+    if eventbridge is not None:
+        threading.Thread(target=run_outbox_publisher, name="order-event-outbox", daemon=True).start()
 
 
 @app.get("/health")
@@ -100,6 +163,19 @@ def create_order(request: CreateOrderRequest):
         "status": "PLACED",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    event_detail = {
+        "schemaVersion": "1",
+        "eventId": order_id,
+        "orderId": order_id,
+        "customerName": request.customer_name,
+        "sku": request.sku,
+        "productName": product["name"],
+        "quantity": request.quantity,
+        "unitPrice": product["price"],
+        "total": round(request.quantity * product["price"], 2),
+        "status": "PLACED",
+        "createdAt": order["created_at"],
+    }
 
     try:
         with closing(connect()) as connection:
@@ -109,6 +185,11 @@ def create_order(request: CreateOrderRequest):
                 VALUES (:order_id, :customer_name, :sku, :product_name, :quantity, :unit_price, :status, :created_at)""",
                 order,
             )
+            if EVENT_BUS_NAME:
+                connection.execute(
+                    "INSERT INTO event_outbox (event_id, detail_json, created_at) VALUES (?, ?, ?)",
+                    (order_id, json.dumps(event_detail), order["created_at"]),
+                )
             connection.commit()
     except sqlite3.Error as error:
         try:
@@ -121,19 +202,20 @@ def create_order(request: CreateOrderRequest):
             logger.exception("Order storage failed and inventory compensation also failed for %s", order_id)
         raise HTTPException(status_code=503, detail="Order could not be saved; inventory release was requested") from error
 
-    try:
-        notification_response = httpx.post(
-            f"{NOTIFICATIONS_URL}/notifications/order-updates",
-            json={
-                "order_id": order_id,
-                "customer_name": request.customer_name,
-                "message": f"Your order for {request.quantity} x {product['name']} was placed.",
-            },
-            timeout=2,
-        )
-        notification_response.raise_for_status()
-    except httpx.HTTPError:
-        logger.warning("Order %s was placed, but notification delivery is currently unavailable", order_id)
+    if not EVENT_BUS_NAME:
+        try:
+            notification_response = httpx.post(
+                f"{NOTIFICATIONS_URL}/notifications/order-updates",
+                json={
+                    "order_id": order_id,
+                    "customer_name": request.customer_name,
+                    "message": f"Your order for {request.quantity} x {product['name']} was placed.",
+                },
+                timeout=2,
+            )
+            notification_response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning("Order %s was placed, but notification delivery is currently unavailable", order_id)
 
     return {**order, "total": round(request.quantity * product["price"], 2)}
 
