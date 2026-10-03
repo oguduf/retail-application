@@ -278,7 +278,7 @@ spec:
         app: frontend
     spec:
       securityContext:
-        fsGroup: 101
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -287,8 +287,8 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true
-            runAsUser: 101
-            runAsGroup: 101
+            runAsUser: 10001
+            runAsGroup: 10001
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
