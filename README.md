@@ -60,6 +60,49 @@ The AWS manifests use the EKS EBS CSI add-on and encrypted `gp3` EBS volumes for
 
 On AWS, a placed order is saved together with an outbox event. The Order service retries publishing that event to EventBridge using its IRSA role; EventBridge routes `OrderCreated` events to the notification SQS queue. The Notification service consumes the queue, records the update for the UI, then publishes a message to the order-notifications SNS topic. Failed messages are retried by SQS and eventually sent to its DLQ. This path is at-least-once: a rare retry after an ambiguous network failure may publish a duplicate SNS message. An optional SNS email subscription can be configured with Terraform; the recipient must confirm the subscription.
 
+### Customer order architecture
+
+```mermaid
+flowchart LR
+    Browser --> DNS["Domain DNS"] --> ALB["Public ALB + ACM HTTPS"]
+    ALB --> Frontend["Frontend / Nginx on EKS"]
+    Frontend --> Product["Product catalog API"]
+    Frontend --> Inventory["Inventory API"]
+    Frontend --> Orders["Order API"]
+    Frontend --> Notifications["Notification API"]
+    Orders -->|catalog lookup| Product
+    Orders -->|reserve stock| Inventory
+    Inventory --> InventoryDB["SQLite on EBS"]
+    Orders --> OrdersDB["SQLite orders + outbox on EBS"]
+    Orders -->|publish pending outbox events| EventBus["EventBridge custom bus"]
+    EventBus -->|OrderCreated rule| NotificationQueue["Notification SQS"]
+    EventBus -. target delivery failure .-> NotificationDLQ["Notification DLQ"]
+    NotificationQueue -. retries exhausted .-> NotificationDLQ
+    NotificationQueue -->|poll and delete| Notifications
+    Notifications --> NotificationDB["SQLite updates on EBS"]
+    Notifications -->|publish| OrderTopic["Order notifications SNS"]
+    OrderTopic --> Email["Confirmed email subscription"]
+```
+
+The order service calls inventory directly. No inventory SQS consumer is deployed; the unused inventory queue and target are slated for removal through a reviewed Terraform plan.
+
+### Monitoring architecture
+
+```mermaid
+flowchart LR
+    Producer["Monitoring producer on EKS"] -->|IRSA SendMessage| MonitoringQueue["Monitoring events SQS"]
+    MonitoringQueue --> Processor["Event processor Lambda"]
+    MonitoringQueue -. retries exhausted .-> MonitoringDLQ["Monitoring DLQ"]
+    Processor --> EventsTable["Monitoring events DynamoDB"]
+    Processor --> Archive["S3 raw event archive"]
+    Processor -->|critical only| CriticalTopic["Critical events SNS"]
+    Client["Monitoring API client"] --> APIGateway["API Gateway"] --> Query["Query Lambda"] --> EventsTable
+```
+
+The monitoring pipeline stores operational events. It does not store coffee orders or inventory in the monitoring DynamoDB table.
+
+The `Security checks` workflow runs Gitleaks on Git history, Checkov on configuration, and Trivy on dependencies and configuration for pushes and pull requests. Manual AWS deployment waits for the same checks and scans each built container image with Trivy before pushing it to ECR. A failing scan stops deployment; review and fix the finding rather than bypassing the gate.
+
 ## Local request flow
 
 ```text
