@@ -31,7 +31,6 @@ jobs:
           output_format: cli
           quiet: true
           soft_fail: false
-          skip_results_upload: true
 
       - name: Scan dependencies and configuration
         uses: aquasecurity/trivy-action@v0.36.0
