@@ -395,6 +395,8 @@ spec:
               memory: 64Mi
       volumes:
         - name: nginx-cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: nginx-run
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
