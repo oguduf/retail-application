@@ -29,6 +29,7 @@ spec:
       labels:
         app: product-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -36,7 +37,7 @@ spec:
       containers:
         - name: product-service
           image: PRODUCT_IMAGE_PLACEHOLDER
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -85,6 +86,7 @@ spec:
       labels:
         app: inventory-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -92,7 +94,7 @@ spec:
       containers:
         - name: inventory-service
           image: INVENTORY_IMAGE_PLACEHOLDER
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -147,6 +149,7 @@ spec:
       labels:
         app: order-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -155,7 +158,7 @@ spec:
       containers:
         - name: order-service
           image: ORDER_IMAGE_PLACEHOLDER
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -213,6 +216,7 @@ spec:
       labels:
         app: notification-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -221,7 +225,7 @@ spec:
       containers:
         - name: notification-service
           image: NOTIFICATION_IMAGE_PLACEHOLDER
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -277,6 +281,7 @@ spec:
       labels:
         app: frontend
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -284,7 +289,7 @@ spec:
       containers:
         - name: frontend
           image: FRONTEND_IMAGE_PLACEHOLDER
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001

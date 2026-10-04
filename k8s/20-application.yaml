@@ -3,6 +3,9 @@ kind: Service
 metadata:
   name: product-service
   namespace: coffee-store
+  annotations:
+    checkov.io/skip1: "CKV_K8S_15=Local kind preloads dev images so Never is required; AWS manifest sets Always"
+    checkov.io/skip2: "CKV_K8S_43=This manifest is for local kind with preloaded dev tags; AWS deployment uses pushed ECR digests"
 spec:
   type: ClusterIP
   selector:
@@ -27,6 +30,7 @@ spec:
       labels:
         app: product-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -70,6 +74,9 @@ kind: Service
 metadata:
   name: inventory-service
   namespace: coffee-store
+  annotations:
+    checkov.io/skip1: "CKV_K8S_15=Local kind preloads dev images so Never is required; AWS manifest sets Always"
+    checkov.io/skip2: "CKV_K8S_43=This manifest is for local kind with preloaded dev tags; AWS deployment uses pushed ECR digests"
 spec:
   type: ClusterIP
   selector:
@@ -94,6 +101,7 @@ spec:
       labels:
         app: inventory-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -147,6 +155,9 @@ kind: Service
 metadata:
   name: order-service
   namespace: coffee-store
+  annotations:
+    checkov.io/skip1: "CKV_K8S_15=Local kind preloads dev images so Never is required; AWS manifest sets Always"
+    checkov.io/skip2: "CKV_K8S_43=This manifest is for local kind with preloaded dev tags; AWS deployment uses pushed ECR digests"
 spec:
   type: ClusterIP
   selector:
@@ -171,6 +182,7 @@ spec:
       labels:
         app: order-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -230,6 +242,9 @@ kind: Service
 metadata:
   name: notification-service
   namespace: coffee-store
+  annotations:
+    checkov.io/skip1: "CKV_K8S_15=Local kind preloads dev images so Never is required; AWS manifest sets Always"
+    checkov.io/skip2: "CKV_K8S_43=This manifest is for local kind with preloaded dev tags; AWS deployment uses pushed ECR digests"
 spec:
   type: ClusterIP
   selector:
@@ -254,6 +269,7 @@ spec:
       labels:
         app: notification-service
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -307,6 +323,9 @@ kind: Service
 metadata:
   name: frontend
   namespace: coffee-store
+  annotations:
+    checkov.io/skip1: "CKV_K8S_15=Local kind preloads dev images so Never is required; AWS manifest sets Always"
+    checkov.io/skip2: "CKV_K8S_43=This manifest is for local kind with preloaded dev tags; AWS deployment uses pushed ECR digests"
 spec:
   type: ClusterIP
   selector:
@@ -331,6 +350,7 @@ spec:
       labels:
         app: frontend
     spec:
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         seccompProfile:
