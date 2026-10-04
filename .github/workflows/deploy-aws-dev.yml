@@ -32,12 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out application repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate deployment configuration
         shell: bash
         run: |
-          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT ACM_CERTIFICATE_ARN DOMAIN_NAME ORDER_EVENT_BUS_NAME ORDER_NOTIFICATION_QUEUE_URL ORDER_NOTIFICATION_TOPIC_ARN ORDER_SERVICE_ROLE_ARN NOTIFICATION_SERVICE_ROLE_ARN; do
+          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT ACM_CERTIFICATE_ARN DOMAIN_NAME EVENT_BUS_NAME ORDER_NOTIFICATION_QUEUE_URL ORDER_NOTIFICATION_TOPIC_ARN ORDER_SERVICE_ROLE_ARN NOTIFICATION_SERVICE_ROLE_ARN; do
             if [ -z "${!name}" ]; then
               echo "Missing repository variable: $name" >&2
               exit 1
@@ -45,7 +45,7 @@ jobs:
           done
 
       - name: Run product catalog tests
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -64,7 +64,10 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: RoastRelayCoffeeStoreDeploy
 
-      - name: Build and push all five application images
+      - name: Set up Trivy for image scans
+        uses: aquasecurity/setup-trivy@v0.3.1
+
+      - name: Build and scan all five application images
         shell: bash
         run: |
           registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
@@ -79,12 +82,35 @@ jobs:
             esac
             image="${registry}/${PROJECT_NAME}-${ENVIRONMENT}-${service}:${IMAGE_TAG}"
             docker build --tag "$image" "$directory"
-            docker push "$image"
+            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
           done
           echo "ECR_REGISTRY=$registry" >> "$GITHUB_ENV"
 
+      - name: Push scanned application images
+        shell: bash
+        run: |
+          for service in product inventory order notification frontend; do
+            repository="${PROJECT_NAME}-${ENVIRONMENT}-${service}"
+            image="${ECR_REGISTRY}/${repository}:${IMAGE_TAG}"
+            push_output="$(docker push "$image" 2>&1)"
+            printf '%s\n' "$push_output"
+            digest="$(printf '%s\n' "$push_output" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n 1)"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Could not read the pushed image digest for $repository" >&2
+              exit 1
+            fi
+            case "$service" in
+              product) image_variable=PRODUCT_IMAGE_REF ;;
+              inventory) image_variable=INVENTORY_IMAGE_REF ;;
+              order) image_variable=ORDER_IMAGE_REF ;;
+              notification) image_variable=NOTIFICATION_IMAGE_REF ;;
+              frontend) image_variable=FRONTEND_IMAGE_REF ;;
+            esac
+            printf '%s=%s\n' "$image_variable" "${ECR_REGISTRY}/${repository}@${digest}" >> "$GITHUB_ENV"
+          done
+
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5.1.0
         with:
           version: v1.36.1
 
@@ -100,16 +126,12 @@ jobs:
           import os
           from pathlib import Path
 
-          registry = os.environ["ECR_REGISTRY"]
-          project = os.environ["PROJECT_NAME"]
-          environment = os.environ["ENVIRONMENT"]
-          tag = os.environ["IMAGE_TAG"]
           replacements = {
-              "PRODUCT_IMAGE_PLACEHOLDER": f"{registry}/{project}-{environment}-product:{tag}",
-              "INVENTORY_IMAGE_PLACEHOLDER": f"{registry}/{project}-{environment}-inventory:{tag}",
-              "ORDER_IMAGE_PLACEHOLDER": f"{registry}/{project}-{environment}-order:{tag}",
-              "NOTIFICATION_IMAGE_PLACEHOLDER": f"{registry}/{project}-{environment}-notification:{tag}",
-              "FRONTEND_IMAGE_PLACEHOLDER": f"{registry}/{project}-{environment}-frontend:{tag}",
+              "PRODUCT_IMAGE_PLACEHOLDER": os.environ["PRODUCT_IMAGE_REF"],
+              "INVENTORY_IMAGE_PLACEHOLDER": os.environ["INVENTORY_IMAGE_REF"],
+              "ORDER_IMAGE_PLACEHOLDER": os.environ["ORDER_IMAGE_REF"],
+              "NOTIFICATION_IMAGE_PLACEHOLDER": os.environ["NOTIFICATION_IMAGE_REF"],
+              "FRONTEND_IMAGE_PLACEHOLDER": os.environ["FRONTEND_IMAGE_REF"],
               "ORDER_SERVICE_ROLE_ARN_PLACEHOLDER": os.environ["ORDER_SERVICE_ROLE_ARN"],
               "NOTIFICATION_SERVICE_ROLE_ARN_PLACEHOLDER": os.environ["NOTIFICATION_SERVICE_ROLE_ARN"],
               "EVENT_BUS_NAME_PLACEHOLDER": os.environ["EVENT_BUS_NAME"],
