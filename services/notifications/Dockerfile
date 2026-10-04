@@ -1,5 +1,9 @@
 FROM python:3.12.15-slim-trixie
 
+RUN apt-get update \
+    && apt-get install --only-upgrade -y --no-install-recommends libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .
