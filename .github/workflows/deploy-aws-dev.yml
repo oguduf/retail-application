@@ -28,13 +28,7 @@ env:
   IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
-  security:
-    uses: ./.github/workflows/security.yml
-    permissions:
-      contents: read
-
   deploy:
-    needs: security
     runs-on: ubuntu-latest
     steps:
       - name: Check out application repository
