@@ -17,49 +17,18 @@ Each backend runs in a separate container. The frontend uses Nginx to route API 
 ## Repository layout
 
 ```text
-.
-├── .github/
-│   └── workflows/
-│       ├── deploy-aws-dev.yml
-│       └── security.yml
-├── frontend/
-│   ├── app.js
-│   ├── index.html
-│   ├── nginx.conf
-│   └── styles.css
-├── k8s/
-│   ├── 00-namespace.yaml
-│   ├── 10-storage.yaml
-│   ├── 20-application.yaml
-│   └── aws/
-│       ├── 00-namespace.yaml
-│       ├── 10-storage.yaml
-│       ├── 20-application.yaml.tpl
-│       └── 30-ingress.yaml
-├── services/
-│   ├── product/
-│   │   ├── app/main.py
-│   │   ├── data/products.json
-│   │   ├── tests/
-│   │   ├── Dockerfile
-│   │   └── requirements*.txt
-│   ├── inventory/
-│   │   ├── app/main.py
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   ├── orders/
-│   │   ├── app/main.py
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   └── notifications/
-│       ├── app/main.py
-│       ├── Dockerfile
-│       └── requirements.txt
-├── docker-compose.yml
-└── README.md
+.github/workflows/         Deployment and security workflows
+frontend/                  Storefront UI and Nginx API routing
+services/product/          Product catalog API, data, and tests
+services/inventory/        Inventory API and stock reservations
+services/orders/           Order API and outbox publishing
+services/notifications/    Notification API and order updates
+k8s/                       Local Kubernetes manifests
+k8s/aws/                   AWS/EKS storage, app, and ingress manifests
+docker-compose.yml         Local multi-container development setup
 ```
 
-`frontend/` contains the static storefront and Nginx API routing. Each directory under `services/` contains one backend API and its container definition. `k8s/` contains the local Kubernetes manifests; `k8s/aws/` contains the AWS/EKS manifests used by the deployment workflow.
+Each service directory also contains its Dockerfile and Python dependencies. The AWS deployment workflow uses the manifests under `k8s/aws/`.
 
 ## Local run
 
