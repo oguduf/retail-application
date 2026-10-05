@@ -14,6 +14,53 @@ A local first Coffee Store built as five independently runnable components: a pr
 
 Each backend runs in a separate container. The frontend uses Nginx to route API calls to the backend containers. The browser only needs to reach the frontend on port 8080.
 
+## Repository layout
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       ├── deploy-aws-dev.yml
+│       └── security.yml
+├── frontend/
+│   ├── app.js
+│   ├── index.html
+│   ├── nginx.conf
+│   └── styles.css
+├── k8s/
+│   ├── 00-namespace.yaml
+│   ├── 10-storage.yaml
+│   ├── 20-application.yaml
+│   └── aws/
+│       ├── 00-namespace.yaml
+│       ├── 10-storage.yaml
+│       ├── 20-application.yaml.tpl
+│       └── 30-ingress.yaml
+├── services/
+│   ├── product/
+│   │   ├── app/main.py
+│   │   ├── data/products.json
+│   │   ├── tests/
+│   │   ├── Dockerfile
+│   │   └── requirements*.txt
+│   ├── inventory/
+│   │   ├── app/main.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── orders/
+│   │   ├── app/main.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── notifications/
+│       ├── app/main.py
+│       ├── Dockerfile
+│       └── requirements.txt
+├── docker-compose.yml
+└── README.md
+```
+
+`frontend/` contains the static storefront and Nginx API routing. Each directory under `services/` contains one backend API and its container definition. `k8s/` contains the local Kubernetes manifests; `k8s/aws/` contains the AWS/EKS manifests used by the deployment workflow.
+
 ## Local run
 
 Start Docker Desktop, then from this repository root run:
