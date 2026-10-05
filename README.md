@@ -14,6 +14,22 @@ A local first Coffee Store built as five independently runnable components: a pr
 
 Each backend runs in a separate container. The frontend uses Nginx to route API calls to the backend containers. The browser only needs to reach the frontend on port 8080.
 
+## Repository layout
+
+```text
+.github/workflows/         Deployment and security workflows
+frontend/                  Storefront UI and Nginx API routing
+services/product/          Product catalog API, data, and tests
+services/inventory/        Inventory API and stock reservations
+services/orders/           Order API and outbox publishing
+services/notifications/    Notification API and order updates
+k8s/                       Local Kubernetes manifests
+k8s/aws/                   AWS/EKS storage, app, and ingress manifests
+docker-compose.yml         Local multi-container development setup
+```
+
+Each service directory also contains its Dockerfile and Python dependencies. The AWS deployment workflow uses the manifests under `k8s/aws/`.
+
 ## Local run
 
 Start Docker Desktop, then from this repository root run:
