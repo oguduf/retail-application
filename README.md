@@ -1,5 +1,7 @@
 # Roast & Relay Coffee Store
 
+The AWS platform and Terraform infrastructure for this application are documented in the [retail-microservices-eks-platform repository](https://github.com/oguduf/retail-microservices-eks-platform).
+
 A local first Coffee Store built as five independently runnable components: a product catalog, inventory service, order service, notification service, and frontend. Docker Compose runs them together without AWS dependencies.
 
 ## Components
