@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           helm upgrade --install coffee-store ./helm/coffee-store \
-            --namespace coffee-store --create-namespace --wait --timeout 10m --atomic \
+            --namespace coffee-store --create-namespace --wait --timeout 10m \
             --set-string project="$PROJECT_NAME" \
             --set-string environment="$ENVIRONMENT" \
             --set-string awsRegion="$AWS_REGION" \
@@ -191,19 +191,26 @@ jobs:
             --set-string services.notification-service.image="$NOTIFICATION_IMAGE_REF" \
             --set-string services.frontend.image="$FRONTEND_IMAGE_REF"
 
-      - name: Diagnose failed database migration
+      - name: Diagnose failed application deployment
         if: ${{ failure() }}
         shell: bash
         run: |
           set +e
-          kubectl -n coffee-store describe job coffee-store-orders-db-migration
-          for pod in $(kubectl -n coffee-store get pods \
-            -l batch.kubernetes.io/job-name=coffee-store-orders-db-migration \
-            -o name); do
-            echo "=== $pod ==="
-            kubectl -n coffee-store logs "$pod" --all-containers=true --tail=200
+          echo '=== Deployments and Pods ==='
+          kubectl -n coffee-store get deployments,pods -o wide
+          echo '=== Recent namespace events ==='
+          kubectl -n coffee-store get events --sort-by=.lastTimestamp | tail -n 80
+          echo '=== Pod details and logs ==='
+          for pod in $(kubectl -n coffee-store get pods -o name); do
+            echo "=== $pod: details ==="
             kubectl -n coffee-store describe "$pod"
+            echo "=== $pod: current logs ==="
+            kubectl -n coffee-store logs "$pod" --all-containers=true --tail=100
+            echo "=== $pod: previous logs ==="
+            kubectl -n coffee-store logs "$pod" --all-containers=true --previous --tail=100
           done
+          echo '=== Database migration Job ==='
+          kubectl -n coffee-store describe job coffee-store-orders-db-migration
           exit 0
 
       - name: Verify application rollouts
