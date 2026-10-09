@@ -191,6 +191,21 @@ jobs:
             --set-string services.notification-service.image="$NOTIFICATION_IMAGE_REF" \
             --set-string services.frontend.image="$FRONTEND_IMAGE_REF"
 
+      - name: Diagnose failed database migration
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          set +e
+          kubectl -n coffee-store describe job coffee-store-orders-db-migration
+          for pod in $(kubectl -n coffee-store get pods \
+            -l batch.kubernetes.io/job-name=coffee-store-orders-db-migration \
+            -o name); do
+            echo "=== $pod ==="
+            kubectl -n coffee-store logs "$pod" --all-containers=true --tail=200
+            kubectl -n coffee-store describe "$pod"
+          done
+          exit 0
+
       - name: Verify application rollouts
         shell: bash
         run: |
