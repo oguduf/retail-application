@@ -36,7 +36,7 @@ NOTIFICATIONS_URL = os.getenv("NOTIFICATIONS_URL", "http://notification-service:
 EVENT_BUS_NAME = os.getenv("EVENT_BUS_NAME", "")
 OUTBOX_POLL_SECONDS = float(os.getenv("OUTBOX_POLL_SECONDS", "5"))
 OUTBOX_PUBLISHER_ENABLED = os.getenv("OUTBOX_PUBLISHER_ENABLED", "false").lower() == "true"
-eventbridge = boto3.client("events") if EVENT_BUS_NAME else None
+eventbridge = boto3.client("events", region_name=AWS_REGION) if EVENT_BUS_NAME else None
 
 
 def get_database_url():

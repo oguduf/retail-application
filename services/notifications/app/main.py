@@ -29,8 +29,8 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL", "")
 SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "")
 logger = logging.getLogger(__name__)
-sqs = boto3.client("sqs") if SQS_QUEUE_URL else None
-sns = boto3.client("sns") if SNS_TOPIC_ARN else None
+sqs = boto3.client("sqs", region_name=AWS_REGION) if SQS_QUEUE_URL else None
+sns = boto3.client("sns", region_name=AWS_REGION) if SNS_TOPIC_ARN else None
 
 
 class OrderUpdate(BaseModel):
