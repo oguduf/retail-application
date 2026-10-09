@@ -1,0 +1,40 @@
+{{- $orderService := index .Values.services "order-service" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-orders-db-migration
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: orders-db-migration, app.kubernetes.io/part-of: roast-relay}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: order-db-migrator
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: orders-db-migration
+          image: {{ $orderService.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.bootstrap_db"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: AWS_REGION, value: {{ .Values.awsRegion | quote }}}
+            - {name: DATABASE_HOST, value: {{ .Values.orders.databaseHost | quote }}}
+            - {name: DATABASE_PORT, value: "5432"}
+            - {name: DATABASE_NAME, value: {{ .Values.orders.databaseName | quote }}}
+            - {name: DATABASE_SECRET_ARN, value: {{ .Values.orders.databaseSecretArn | quote }}}

@@ -10,6 +10,20 @@ permissions:
   contents: read
 
 jobs:
+  validate-helm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.0
+
+      - name: Lint and render the application chart
+        run: |
+          helm lint helm/coffee-store --strict
+          helm template coffee-store helm/coffee-store --namespace coffee-store > /tmp/coffee-store-rendered.yaml
+
   scan:
     runs-on: ubuntu-latest
     steps:

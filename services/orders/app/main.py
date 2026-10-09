@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 
 import httpx
 import boto3
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.conninfo import make_conninfo
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -19,12 +22,41 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Coffee Order Service")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "/data/orders.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_HOST = os.getenv("DATABASE_HOST", "")
+DATABASE_NAME = os.getenv("DATABASE_NAME", "orders")
+DATABASE_USER = os.getenv("DATABASE_USER", "orders_app")
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "orders")
+DATABASE_IAM_AUTH = os.getenv("DATABASE_IAM_AUTH", "false").lower() == "true"
+AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
+DATABASE_SCHEMA_BOOTSTRAP = os.getenv("DATABASE_SCHEMA_BOOTSTRAP", "true").lower() == "true"
 CATALOG_URL = os.getenv("CATALOG_URL", "http://product-service:8000")
 INVENTORY_URL = os.getenv("INVENTORY_URL", "http://inventory-service:8000")
 NOTIFICATIONS_URL = os.getenv("NOTIFICATIONS_URL", "http://notification-service:8000")
 EVENT_BUS_NAME = os.getenv("EVENT_BUS_NAME", "")
 OUTBOX_POLL_SECONDS = float(os.getenv("OUTBOX_POLL_SECONDS", "5"))
+OUTBOX_PUBLISHER_ENABLED = os.getenv("OUTBOX_PUBLISHER_ENABLED", "false").lower() == "true"
 eventbridge = boto3.client("events") if EVENT_BUS_NAME else None
+
+
+def get_database_url():
+    """Resolve local SQLite or the configured PostgreSQL connection target."""
+    if DATABASE_URL:
+        return DATABASE_URL
+    if not DATABASE_HOST:
+        return ""
+    return make_conninfo(
+        host=DATABASE_HOST,
+        port=int(os.getenv("DATABASE_PORT", "5432")),
+        dbname=DATABASE_NAME,
+        user=DATABASE_USER,
+        options=f"-c search_path={DATABASE_SCHEMA},public",
+        sslmode="require",
+    )
+
+
+POSTGRES_CONNINFO = get_database_url()
+USING_POSTGRES = bool(POSTGRES_CONNINFO)
 
 
 class CreateOrderRequest(BaseModel):
@@ -34,27 +66,47 @@ class CreateOrderRequest(BaseModel):
 
 
 def connect():
+    if USING_POSTGRES:
+        parameters = {"row_factory": dict_row, "connect_timeout": 5}
+        if DATABASE_IAM_AUTH:
+            token = boto3.client("rds", region_name=AWS_REGION).generate_db_auth_token(
+                DBHostname=DATABASE_HOST,
+                Port=int(os.getenv("DATABASE_PORT", "5432")),
+                DBUsername=DATABASE_USER,
+                Region=AWS_REGION,
+            )
+            parameters["password"] = token
+        return psycopg.connect(POSTGRES_CONNINFO, **parameters)
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     connection = sqlite3.connect(DATABASE_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
     return connection
 
 
+def execute(connection, statement, parameters=()):
+    """Use the DB-API placeholder style expected by the configured driver."""
+    if USING_POSTGRES:
+        statement = statement.replace("?", "%s")
+    return connection.execute(statement, parameters)
+
+
 def initialize_database():
+    if not DATABASE_SCHEMA_BOOTSTRAP:
+        return
     with closing(connect()) as connection:
-        connection.execute(
+        execute(connection,
             """CREATE TABLE IF NOT EXISTS orders (
                 order_id TEXT PRIMARY KEY,
                 customer_name TEXT NOT NULL,
                 sku TEXT NOT NULL,
                 product_name TEXT NOT NULL,
                 quantity INTEGER NOT NULL,
-                unit_price REAL NOT NULL,
+                unit_price DOUBLE PRECISION NOT NULL,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )"""
         )
-        connection.execute(
+        execute(connection,
             """CREATE TABLE IF NOT EXISTS event_outbox (
                 event_id TEXT PRIMARY KEY,
                 detail_json TEXT NOT NULL,
@@ -73,7 +125,7 @@ def publish_pending_order_events():
         return
 
     with closing(connect()) as connection:
-        pending = connection.execute(
+        pending = execute(connection,
             "SELECT event_id, detail_json FROM event_outbox WHERE published_at IS NULL ORDER BY created_at LIMIT 10"
         ).fetchall()
 
@@ -91,7 +143,7 @@ def publish_pending_order_events():
                 raise RuntimeError(response["Entries"][0].get("ErrorMessage", "EventBridge rejected the event"))
 
             with closing(connect()) as connection:
-                connection.execute(
+                execute(connection,
                     "UPDATE event_outbox SET published_at = ? WHERE event_id = ? AND published_at IS NULL",
                     (datetime.now(timezone.utc).isoformat(), row["event_id"]),
                 )
@@ -112,13 +164,23 @@ def run_outbox_publisher():
 
 @app.on_event("startup")
 def start_outbox_publisher():
-    if eventbridge is not None:
+    if eventbridge is not None and OUTBOX_PUBLISHER_ENABLED:
         threading.Thread(target=run_outbox_publisher, name="order-event-outbox", daemon=True).start()
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "orders"}
+
+
+@app.get("/ready")
+def readiness_check():
+    try:
+        with closing(connect()) as connection:
+            execute(connection, "SELECT 1")
+    except (sqlite3.Error, psycopg.Error) as error:
+        raise HTTPException(status_code=503, detail="Order database is unavailable") from error
+    return {"status": "ready", "service": "orders"}
 
 
 @app.post("/orders", status_code=201)
@@ -179,19 +241,22 @@ def create_order(request: CreateOrderRequest):
 
     try:
         with closing(connect()) as connection:
-            connection.execute(
+            execute(connection,
                 """INSERT INTO orders
                 (order_id, customer_name, sku, product_name, quantity, unit_price, status, created_at)
-                VALUES (:order_id, :customer_name, :sku, :product_name, :quantity, :unit_price, :status, :created_at)""",
-                order,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                tuple(order[key] for key in (
+                    "order_id", "customer_name", "sku", "product_name", "quantity",
+                    "unit_price", "status", "created_at",
+                )),
             )
             if EVENT_BUS_NAME:
-                connection.execute(
+                execute(connection,
                     "INSERT INTO event_outbox (event_id, detail_json, created_at) VALUES (?, ?, ?)",
                     (order_id, json.dumps(event_detail), order["created_at"]),
                 )
             connection.commit()
-    except sqlite3.Error as error:
+    except (sqlite3.Error, psycopg.Error) as error:
         try:
             httpx.post(
                 f"{INVENTORY_URL}/inventory/reservations/release",
@@ -223,14 +288,14 @@ def create_order(request: CreateOrderRequest):
 @app.get("/orders")
 def list_orders():
     with closing(connect()) as connection:
-        rows = connection.execute("SELECT * FROM orders ORDER BY created_at DESC LIMIT 50").fetchall()
+        rows = execute(connection, "SELECT * FROM orders ORDER BY created_at DESC LIMIT 50").fetchall()
     return [dict(row) | {"total": round(row["quantity"] * row["unit_price"], 2)} for row in rows]
 
 
 @app.get("/orders/{order_id}")
 def get_order(order_id: str):
     with closing(connect()) as connection:
-        row = connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
+        row = execute(connection, "SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Order not found")
     order = dict(row)

@@ -1,11 +1,10 @@
-name: Build and deploy Coffee Store to EKS
+name: Deploy Coffee Store to EKS
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: coffee-store-aws-dev
@@ -23,13 +22,52 @@ env:
   ORDER_NOTIFICATION_QUEUE_URL: ${{ vars.ORDER_NOTIFICATION_QUEUE_URL }}
   ORDER_NOTIFICATION_TOPIC_ARN: ${{ vars.ORDER_NOTIFICATION_TOPIC_ARN }}
   ORDER_SERVICE_ROLE_ARN: ${{ vars.ORDER_SERVICE_ROLE_ARN }}
+  ORDER_DB_MIGRATOR_ROLE_ARN: ${{ vars.ORDER_DB_MIGRATOR_ROLE_ARN }}
+  INVENTORY_SERVICE_ROLE_ARN: ${{ vars.INVENTORY_SERVICE_ROLE_ARN }}
   NOTIFICATION_SERVICE_ROLE_ARN: ${{ vars.NOTIFICATION_SERVICE_ROLE_ARN }}
+  ORDERS_DATABASE_HOST: ${{ vars.ORDERS_DATABASE_HOST }}
+  ORDERS_DATABASE_SECRET_ARN: ${{ vars.ORDERS_DATABASE_SECRET_ARN }}
   # Include the workflow run ID so a fresh dispatch of the same commit gets a new immutable ECR tag.
   IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require the dev branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/dev" ]]; then
+            echo "::error::Select the dev branch when dispatching this deployment."
+            exit 1
+          fi
+
+      - name: Require successful CI and security checks for this commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for workflow in ci.yml security.yml; do
+            if ! gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow "$workflow" --commit "$GITHUB_SHA" \
+              --event push --status success \
+              --json headSha,conclusion --limit 100 |
+              jq -e --arg sha "$GITHUB_SHA" 'any(.[]; .headSha == $sha and .conclusion == "success")' >/dev/null; then
+              echo "::error::No successful push run of $workflow was found for commit $GITHUB_SHA."
+              exit 1
+            fi
+          done
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out application repository
         uses: actions/checkout@v6
@@ -37,25 +75,12 @@ jobs:
       - name: Validate deployment configuration
         shell: bash
         run: |
-          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT ACM_CERTIFICATE_ARN DOMAIN_NAME EVENT_BUS_NAME ORDER_NOTIFICATION_QUEUE_URL ORDER_NOTIFICATION_TOPIC_ARN ORDER_SERVICE_ROLE_ARN NOTIFICATION_SERVICE_ROLE_ARN; do
+          for name in AWS_REGION AWS_ROLE_ARN EKS_CLUSTER_NAME PROJECT_NAME ENVIRONMENT ACM_CERTIFICATE_ARN DOMAIN_NAME EVENT_BUS_NAME ORDER_NOTIFICATION_QUEUE_URL ORDER_NOTIFICATION_TOPIC_ARN ORDER_SERVICE_ROLE_ARN ORDER_DB_MIGRATOR_ROLE_ARN INVENTORY_SERVICE_ROLE_ARN NOTIFICATION_SERVICE_ROLE_ARN ORDERS_DATABASE_HOST ORDERS_DATABASE_SECRET_ARN; do
             if [ -z "${!name}" ]; then
               echo "Missing repository variable: $name" >&2
               exit 1
             fi
           done
-
-      - name: Run product catalog tests
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: services/product/requirements-dev.txt
-
-      - name: Install test dependencies and run tests
-        working-directory: services/product
-        run: |
-          python -m pip install --requirement requirements-dev.txt
-          python -m pytest --quiet
 
       - name: Configure AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v6.3.0
@@ -114,49 +139,81 @@ jobs:
         with:
           version: v1.36.1
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.0
+
       - name: Connect to Amazon EKS
         run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
-      - name: Apply AWS storage and application manifests
+      - name: Install Metrics Server for HPA metrics
         shell: bash
         run: |
-          kubectl apply -f k8s/aws/00-namespace.yaml
-          kubectl apply -f k8s/aws/10-storage.yaml
-          python3 - <<'PY' | kubectl apply -f -
-          import os
-          from pathlib import Path
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+          helm repo update metrics-server
+          helm upgrade --install metrics-server metrics-server/metrics-server \
+            --version 3.14.0 --namespace kube-system --set replicas=2 --wait --timeout 5m
 
-          replacements = {
-              "PRODUCT_IMAGE_PLACEHOLDER": os.environ["PRODUCT_IMAGE_REF"],
-              "INVENTORY_IMAGE_PLACEHOLDER": os.environ["INVENTORY_IMAGE_REF"],
-              "ORDER_IMAGE_PLACEHOLDER": os.environ["ORDER_IMAGE_REF"],
-              "NOTIFICATION_IMAGE_PLACEHOLDER": os.environ["NOTIFICATION_IMAGE_REF"],
-              "FRONTEND_IMAGE_PLACEHOLDER": os.environ["FRONTEND_IMAGE_REF"],
-              "ORDER_SERVICE_ROLE_ARN_PLACEHOLDER": os.environ["ORDER_SERVICE_ROLE_ARN"],
-              "NOTIFICATION_SERVICE_ROLE_ARN_PLACEHOLDER": os.environ["NOTIFICATION_SERVICE_ROLE_ARN"],
-              "EVENT_BUS_NAME_PLACEHOLDER": os.environ["EVENT_BUS_NAME"],
-              "ORDER_NOTIFICATION_QUEUE_URL_PLACEHOLDER": os.environ["ORDER_NOTIFICATION_QUEUE_URL"],
-              "ORDER_NOTIFICATION_TOPIC_ARN_PLACEHOLDER": os.environ["ORDER_NOTIFICATION_TOPIC_ARN"],
-          }
-          manifest = Path("k8s/aws/20-application.yaml.tpl").read_text()
-          for placeholder, value in replacements.items():
-              manifest = manifest.replace(placeholder, value)
-          print(manifest)
-          PY
-          python3 - <<'PY' | kubectl apply -f -
-          import os
-          from pathlib import Path
+      - name: Install Vertical Pod Autoscaler
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch vertical-pod-autoscaler-1.7.1 https://github.com/kubernetes/autoscaler.git /tmp/kubernetes-autoscaler
+          cd /tmp/kubernetes-autoscaler/vertical-pod-autoscaler
+          ./hack/vpa-up.sh
+          kubectl rollout status deployment/vpa-recommender --namespace kube-system --timeout=5m
+          kubectl rollout status deployment/vpa-updater --namespace kube-system --timeout=5m
+          kubectl rollout status deployment/vpa-admission-controller --namespace kube-system --timeout=5m
 
-          manifest = Path("k8s/aws/30-ingress.yaml").read_text()
-          manifest = manifest.replace("ACM_CERTIFICATE_ARN_PLACEHOLDER", os.environ["ACM_CERTIFICATE_ARN"])
-          manifest = manifest.replace("DOMAIN_NAME_PLACEHOLDER", os.environ["DOMAIN_NAME"])
-          print(manifest)
-          PY
+      - name: Deploy application with Helm
+        shell: bash
+        run: |
+          helm upgrade --install coffee-store ./helm/coffee-store \
+            --namespace coffee-store --create-namespace --wait --timeout 10m --atomic \
+            --set-string project="$PROJECT_NAME" \
+            --set-string environment="$ENVIRONMENT" \
+            --set-string awsRegion="$AWS_REGION" \
+            --set-string domainName="$DOMAIN_NAME" \
+            --set-string certificateArn="$ACM_CERTIFICATE_ARN" \
+            --set-string serviceAccounts.orderRoleArn="$ORDER_SERVICE_ROLE_ARN" \
+            --set-string serviceAccounts.orderMigratorRoleArn="$ORDER_DB_MIGRATOR_ROLE_ARN" \
+            --set-string serviceAccounts.inventoryRoleArn="$INVENTORY_SERVICE_ROLE_ARN" \
+            --set-string serviceAccounts.notificationRoleArn="$NOTIFICATION_SERVICE_ROLE_ARN" \
+            --set-string orders.databaseHost="$ORDERS_DATABASE_HOST" \
+            --set-string database.host="$ORDERS_DATABASE_HOST" \
+            --set-string orders.databaseSecretArn="$ORDERS_DATABASE_SECRET_ARN" \
+            --set-string orders.eventBusName="$EVENT_BUS_NAME" \
+            --set-string notifications.queueUrl="$ORDER_NOTIFICATION_QUEUE_URL" \
+            --set-string notifications.topicArn="$ORDER_NOTIFICATION_TOPIC_ARN" \
+            --set-string services.product-service.image="$PRODUCT_IMAGE_REF" \
+            --set-string services.inventory-service.image="$INVENTORY_IMAGE_REF" \
+            --set-string services.order-service.image="$ORDER_IMAGE_REF" \
+            --set-string services.order-outbox-relay.image="$ORDER_IMAGE_REF" \
+            --set-string services.notification-service.image="$NOTIFICATION_IMAGE_REF" \
+            --set-string services.frontend.image="$FRONTEND_IMAGE_REF"
 
       - name: Verify application rollouts
         shell: bash
         run: |
-          for deployment in product-service inventory-service order-service notification-service frontend; do
+          for deployment in product-service inventory-service order-service order-outbox-relay notification-service frontend; do
             kubectl rollout status "deployment/${deployment}" --namespace coffee-store --timeout=5m
           done
-          kubectl get pods,services,ingress --namespace coffee-store
+          kubectl get pods,services,ingress,hpa,vpa --namespace coffee-store
+
+      - name: Smoke-test the deployed application through the frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl port-forward --namespace coffee-store service/frontend 18080:80 >/tmp/coffee-store-port-forward.log 2>&1 &
+          port_forward_pid=$!
+          trap 'kill "$port_forward_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null
+          for endpoint in catalog inventory orders notifications; do
+            curl --fail --silent --show-error "http://127.0.0.1:18080/api/${endpoint}" >/dev/null
+            echo "Frontend route /api/${endpoint} responded successfully"
+          done
