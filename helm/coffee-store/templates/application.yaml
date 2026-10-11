@@ -1,0 +1,222 @@
+{{- range $name, $service := .Values.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: roast-relay
+    app.kubernetes.io/managed-by: Helm
+    project: {{ $.Values.project | quote }}
+    environment: {{ $.Values.environment | quote }}
+spec:
+  replicas: {{ if and $service.autoscaling $service.autoscaling.enabled }}{{ $service.autoscaling.minReplicas }}{{ else }}{{ $service.replicas }}{{ end }}
+  {{- if or $service.persistence (eq $name "order-outbox-relay") }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        app.kubernetes.io/part-of: roast-relay
+        project: {{ $.Values.project | quote }}
+        environment: {{ $.Values.environment | quote }}
+    spec:
+      automountServiceAccountToken: {{ if $service.serviceAccount }}true{{ else }}false{{ end }}
+      {{- if $service.serviceAccount }}
+      serviceAccountName: {{ $service.serviceAccount }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $name }}
+          image: {{ $service.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports:
+            - {name: http, containerPort: {{ $service.containerPort }}}
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            {{- if $service.env }}
+            {{- range $service.env }}
+            - name: {{ .name }}
+              value: {{ tpl (printf "%v" .value) $ | quote }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ if or (eq $name "order-service") (eq $name "order-outbox-relay") (eq $name "inventory-service") (eq $name "notification-service") }}/ready{{ else }}/health{{ end }}
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+          {{- if $service.persistence }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          {{- end }}
+          {{- if eq $name "frontend" }}
+          volumeMounts:
+            - {name: nginx-cache, mountPath: /var/cache/nginx}
+            - {name: nginx-run, mountPath: /var/run}
+          {{- end }}
+      {{- if or $service.persistence (eq $name "frontend") }}
+      volumes:
+        {{- if $service.persistence }}
+        - name: data
+          persistentVolumeClaim: {claimName: {{ $service.persistence }}}
+        {{- end }}
+        {{- if eq $name "frontend" }}
+        - {name: nginx-cache, emptyDir: {}}
+        - {name: nginx-run, emptyDir: {}}
+        {{- end }}
+      {{- end }}
+---
+{{- if or (not (hasKey $service "expose")) $service.expose }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: roast-relay
+spec:
+  selector: {app.kubernetes.io/name: {{ $name }}}
+  ports:
+    - {name: http, port: {{ $service.servicePort }}, targetPort: http}
+---
+{{- end }}
+{{- if and $service.autoscaling $service.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: roast-relay
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ $name }}}
+  minReplicas: {{ $service.autoscaling.minReplicas }}
+  maxReplicas: {{ $service.autoscaling.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $service.autoscaling.targetCPUUtilizationPercentage }}
+---
+{{- end }}
+{{- if and $service.verticalAutoscaling $service.verticalAutoscaling.enabled }}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: roast-relay
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  updatePolicy:
+    updateMode: {{ $service.verticalAutoscaling.updateMode | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ $name }}
+        controlledResources:
+          {{- toYaml $service.verticalAutoscaling.controlledResources | nindent 10 }}
+        controlledValues: RequestsAndLimits
+        minAllowed:
+          {{- if $service.verticalAutoscaling.minCPU }}
+          cpu: {{ $service.verticalAutoscaling.minCPU | quote }}
+          {{- end }}
+          memory: {{ $service.verticalAutoscaling.minMemory | quote }}
+        maxAllowed:
+          {{- if $service.verticalAutoscaling.maxCPU }}
+          cpu: {{ $service.verticalAutoscaling.maxCPU | quote }}
+          {{- end }}
+          memory: {{ $service.verticalAutoscaling.maxMemory | quote }}
+---
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-service
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.serviceAccounts.orderRoleArn | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-db-migrator
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+    eks.amazonaws.com/role-arn: {{ .Values.serviceAccounts.orderMigratorRoleArn | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inventory-service
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.serviceAccounts.inventoryRoleArn | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.serviceAccounts.notificationRoleArn | quote }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: coffee-store
+  labels: {app.kubernetes.io/part-of: roast-relay}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.certificateArn | quote }}
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{ .Values.domainName | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port: {number: 80}

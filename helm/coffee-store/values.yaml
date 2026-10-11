@@ -1,0 +1,126 @@
+project: roast-relay
+environment: dev
+awsRegion: us-east-2
+domainName: example.invalid
+certificateArn: ""
+
+serviceAccounts:
+  orderRoleArn: ""
+  orderMigratorRoleArn: ""
+  inventoryRoleArn: ""
+  notificationRoleArn: ""
+
+orders:
+  databaseHost: ""
+  databaseName: orders
+  databaseSecretArn: ""
+  eventBusName: ""
+
+database:
+  host: ""
+  name: orders
+
+notifications:
+  queueUrl: ""
+  topicArn: ""
+
+services:
+  product-service:
+    image: example.invalid/product:replace-me
+    containerPort: 8000
+    servicePort: 8000
+    replicas: 1
+    autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, targetCPUUtilizationPercentage: 70}
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [memory], minMemory: 96Mi, maxMemory: 512Mi}
+    resources: {requests: {cpu: 100m, memory: 96Mi}, limits: {cpu: 500m, memory: 256Mi}}
+    env: []
+  inventory-service:
+    image: example.invalid/inventory:replace-me
+    containerPort: 8000
+    servicePort: 8000
+    replicas: 1
+    autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, targetCPUUtilizationPercentage: 70}
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [memory], minMemory: 64Mi, maxMemory: 256Mi}
+    serviceAccount: inventory-service
+    env:
+      - {name: AWS_REGION, value: "{{ .Values.awsRegion }}"}
+      - {name: DATABASE_HOST, value: "{{ .Values.database.host }}"}
+      - {name: DATABASE_PORT, value: "5432"}
+      - {name: DATABASE_NAME, value: "{{ .Values.database.name }}"}
+      - {name: DATABASE_USER, value: inventory_app}
+      - {name: DATABASE_SCHEMA, value: inventory}
+      - {name: DATABASE_IAM_AUTH, value: "true"}
+      - {name: DATABASE_SCHEMA_BOOTSTRAP, value: "false"}
+    resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 250m, memory: 128Mi}}
+  order-service:
+    image: example.invalid/order:replace-me
+    containerPort: 8000
+    servicePort: 8000
+    replicas: 1
+    autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, targetCPUUtilizationPercentage: 70}
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [memory], minMemory: 128Mi, maxMemory: 512Mi}
+    serviceAccount: order-service
+    env:
+      - {name: AWS_REGION, value: "{{ .Values.awsRegion }}"}
+      - {name: DATABASE_HOST, value: "{{ .Values.orders.databaseHost }}"}
+      - {name: DATABASE_PORT, value: "5432"}
+      - {name: DATABASE_NAME, value: "{{ .Values.orders.databaseName }}"}
+      - {name: DATABASE_SCHEMA, value: orders}
+      - {name: DATABASE_IAM_AUTH, value: "true"}
+      - {name: DATABASE_USER, value: orders_app}
+      - {name: DATABASE_SCHEMA_BOOTSTRAP, value: "false"}
+      - {name: CATALOG_URL, value: http://product-service:8000}
+      - {name: INVENTORY_URL, value: http://inventory-service:8000}
+      - {name: EVENT_BUS_NAME, value: "{{ .Values.orders.eventBusName }}"}
+      - {name: OUTBOX_PUBLISHER_ENABLED, value: "false"}
+    resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+  order-outbox-relay:
+    image: example.invalid/order:replace-me
+    containerPort: 8000
+    replicas: 1
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [cpu, memory], minCPU: 50m, maxCPU: 500m, minMemory: 96Mi, maxMemory: 384Mi}
+    serviceAccount: order-service
+    expose: false
+    env:
+      - {name: AWS_REGION, value: "{{ .Values.awsRegion }}"}
+      - {name: DATABASE_HOST, value: "{{ .Values.orders.databaseHost }}"}
+      - {name: DATABASE_PORT, value: "5432"}
+      - {name: DATABASE_NAME, value: "{{ .Values.orders.databaseName }}"}
+      - {name: DATABASE_SCHEMA, value: orders}
+      - {name: DATABASE_IAM_AUTH, value: "true"}
+      - {name: DATABASE_USER, value: orders_app}
+      - {name: DATABASE_SCHEMA_BOOTSTRAP, value: "false"}
+      - {name: CATALOG_URL, value: http://product-service:8000}
+      - {name: INVENTORY_URL, value: http://inventory-service:8000}
+      - {name: EVENT_BUS_NAME, value: "{{ .Values.orders.eventBusName }}"}
+      - {name: OUTBOX_PUBLISHER_ENABLED, value: "true"}
+    resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {cpu: 250m, memory: 192Mi}}
+  notification-service:
+    image: example.invalid/notification:replace-me
+    containerPort: 8000
+    servicePort: 8000
+    replicas: 1
+    autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, targetCPUUtilizationPercentage: 70}
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [memory], minMemory: 64Mi, maxMemory: 256Mi}
+    serviceAccount: notification-service
+    env:
+      - {name: AWS_REGION, value: "{{ .Values.awsRegion }}"}
+      - {name: DATABASE_HOST, value: "{{ .Values.database.host }}"}
+      - {name: DATABASE_PORT, value: "5432"}
+      - {name: DATABASE_NAME, value: "{{ .Values.database.name }}"}
+      - {name: DATABASE_USER, value: notifications_app}
+      - {name: DATABASE_SCHEMA, value: notifications}
+      - {name: DATABASE_IAM_AUTH, value: "true"}
+      - {name: DATABASE_SCHEMA_BOOTSTRAP, value: "false"}
+      - {name: SQS_QUEUE_URL, value: "{{ .Values.notifications.queueUrl }}"}
+      - {name: SNS_TOPIC_ARN, value: "{{ .Values.notifications.topicArn }}"}
+    resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 250m, memory: 128Mi}}
+  frontend:
+    image: example.invalid/frontend:replace-me
+    containerPort: 8080
+    servicePort: 80
+    replicas: 1
+    autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, targetCPUUtilizationPercentage: 70}
+    verticalAutoscaling: {enabled: true, updateMode: InPlaceOrRecreate, controlledResources: [memory], minMemory: 32Mi, maxMemory: 256Mi}
+    env: []
+    resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
