@@ -193,6 +193,97 @@ jobs:
             --set-string services.notification-service.image="$NOTIFICATION_IMAGE_REF" \
             --set-string services.frontend.image="$FRONTEND_IMAGE_REF"
 
+      - name: Register Coffee Store with Argo CD (manual sync)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          application="$(jq -n \
+            --arg project "$PROJECT_NAME" \
+            --arg environment "$ENVIRONMENT" \
+            --arg awsRegion "$AWS_REGION" \
+            --arg domainName "$DOMAIN_NAME" \
+            --arg certificateArn "$ACM_CERTIFICATE_ARN" \
+            --arg orderRoleArn "$ORDER_SERVICE_ROLE_ARN" \
+            --arg orderMigratorRoleArn "$ORDER_DB_MIGRATOR_ROLE_ARN" \
+            --arg inventoryRoleArn "$INVENTORY_SERVICE_ROLE_ARN" \
+            --arg notificationRoleArn "$NOTIFICATION_SERVICE_ROLE_ARN" \
+            --arg ordersDatabaseHost "$ORDERS_DATABASE_HOST" \
+            --arg ordersDatabaseSecretArn "$ORDERS_DATABASE_SECRET_ARN" \
+            --arg eventBusName "$EVENT_BUS_NAME" \
+            --arg notificationQueueUrl "$ORDER_NOTIFICATION_QUEUE_URL" \
+            --arg notificationTopicArn "$ORDER_NOTIFICATION_TOPIC_ARN" \
+            --arg productImage "$PRODUCT_IMAGE_REF" \
+            --arg inventoryImage "$INVENTORY_IMAGE_REF" \
+            --arg orderImage "$ORDER_IMAGE_REF" \
+            --arg notificationImage "$NOTIFICATION_IMAGE_REF" \
+            --arg frontendImage "$FRONTEND_IMAGE_REF" \
+            '{
+              apiVersion: "argoproj.io/v1alpha1",
+              kind: "Application",
+              metadata: {name: "coffee-store", namespace: "argocd"},
+              spec: {
+                project: "default",
+                source: {
+                  repoURL: "https://github.com/oguduf/retail-application.git",
+                  targetRevision: "dev",
+                  path: "helm/coffee-store",
+                  helm: {
+                    releaseName: "coffee-store",
+                    valuesObject: {
+                      project: $project,
+                      environment: $environment,
+                      awsRegion: $awsRegion,
+                      domainName: $domainName,
+                      certificateArn: $certificateArn,
+                      serviceAccounts: {
+                        orderRoleArn: $orderRoleArn,
+                        orderMigratorRoleArn: $orderMigratorRoleArn,
+                        inventoryRoleArn: $inventoryRoleArn,
+                        notificationRoleArn: $notificationRoleArn
+                      },
+                      orders: {
+                        databaseHost: $ordersDatabaseHost,
+                        databaseName: "orders",
+                        databaseSecretArn: $ordersDatabaseSecretArn,
+                        eventBusName: $eventBusName
+                      },
+                      database: {host: $ordersDatabaseHost, name: "orders"},
+                      notifications: {
+                        queueUrl: $notificationQueueUrl,
+                        topicArn: $notificationTopicArn
+                      },
+                      services: {
+                        "product-service": {image: $productImage},
+                        "inventory-service": {image: $inventoryImage},
+                        "order-service": {image: $orderImage},
+                        "order-outbox-relay": {image: $orderImage},
+                        "notification-service": {image: $notificationImage},
+                        frontend: {image: $frontendImage}
+                      }
+                    }
+                  }
+                },
+                destination: {
+                  server: "https://kubernetes.default.svc",
+                  namespace: "coffee-store"
+                },
+                ignoreDifferences: [{
+                  group: "apps",
+                  kind: "Deployment",
+                  namespace: "coffee-store",
+                  jsonPointers: ["/spec/replicas"]
+                }],
+                syncPolicy: {
+                  syncOptions: ["CreateNamespace=true", "RespectIgnoreDifferences=true"]
+                }
+              }
+            }')"
+
+          printf '%s\n' "$application" | kubectl apply --filename -
+          kubectl get application coffee-store --namespace argocd \
+            --output custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status'
+
       - name: Diagnose failed application deployment
         if: ${{ failure() }}
         shell: bash
