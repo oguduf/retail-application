@@ -279,7 +279,7 @@ jobs:
                   namespace: "coffee-store",
                   jsonPointers: ["/metadata/annotations/argocd.argoproj.io~1tracking-id"]
                 }],
-                syncPolicy: {
+                syncPolicy: {automated: {selfHeal: true},
                   syncOptions: ["CreateNamespace=true", "RespectIgnoreDifferences=true"]
                 }
               }
