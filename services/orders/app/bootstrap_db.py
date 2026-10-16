@@ -88,6 +88,9 @@ def main():
                     ("COLOMBIA-HUILA", 24),
                     ("HOUSE-ESPRESSO", 30),
                     ("DECAF-COLOMBIA", 12),
+                    ("SUMATRA-MANDELING", 20),
+                    ("GUATEMALA-ANTIGUA", 18),
+                    ("KENYA-AA", 22),
                 ],
             )
             cursor.execute('GRANT USAGE ON SCHEMA inventory TO inventory_app')
