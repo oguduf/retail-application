@@ -82,7 +82,10 @@ function renderProducts() {
     card.className = "product-card";
     const art = document.createElement("div");
     art.className = "coffee-art";
-    art.append(makeBag(product));
+    const bagShadow = document.createElement("span");
+    bagShadow.className = "bag-shadow";
+    bagShadow.setAttribute("aria-hidden", "true");
+    art.append(bagShadow, makeBag(product));
     const roast = document.createElement("span");
     roast.className = "roast-tag";
     roast.textContent = `${product.roast} roast`;

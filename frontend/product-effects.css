@@ -6,7 +6,7 @@
   height: 190px;
   perspective: 800px;
   transform-style: preserve-3d;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .coffee-art::before,
@@ -24,7 +24,18 @@
   transform-style: preserve-3d;
   transform: rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
   transition: transform 220ms cubic-bezier(.2,.75,.25,1);
-  filter: drop-shadow(10px 13px 8px #34271e35);
+}
+
+.bag-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  width: 104px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #34271e45 0, #34271e20 48%, transparent 74%);
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .bag-face {
