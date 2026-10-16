@@ -59,7 +59,8 @@ def test_order_service_uses_local_sqlite_without_aws_credentials(tmp_path, monke
         })
 
     def service_response(url, *args, **kwargs):
-        return httpx.Response(201, json={"status": "ok"})
+        request = httpx.Request("POST", url)
+        return httpx.Response(201, json={"status": "ok"}, request=request)
 
     monkeypatch.setattr(order_service.httpx, "get", catalog_response)
     monkeypatch.setattr(order_service.httpx, "post", service_response)
