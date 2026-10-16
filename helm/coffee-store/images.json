@@ -1,12 +1,24 @@
 {
-  "sourceRevision": "pending-first-image-publish",
-  "sourceRun": "",
+  "sourceRevision": "762cf9bceeb9e29a38a315e02d7f2c32e0a3f8f6",
+  "sourceRun": "38908722791",
   "services": {
-    "product-service": { "image": "example.invalid/product:replace-me" },
-    "inventory-service": { "image": "example.invalid/inventory:replace-me" },
-    "order-service": { "image": "example.invalid/order:replace-me" },
-    "order-outbox-relay": { "image": "example.invalid/order:replace-me" },
-    "notification-service": { "image": "example.invalid/notification:replace-me" },
-    "frontend": { "image": "example.invalid/frontend:replace-me" }
+    "product-service": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-product@sha256:65fe21db1c474b6b4b643a1c863cb72f517ba67d0a01d432f19e06bc55d2e7a1"
+    },
+    "inventory-service": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-inventory@sha256:452dd1e848616da507311a19fe1aa607eb2556a61346174f13e7bc09eaaada92"
+    },
+    "order-service": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:59e7ce87d1167290d1824e333e0b8177388f36988ce6a1eb36195aaf777b60cd"
+    },
+    "order-outbox-relay": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:59e7ce87d1167290d1824e333e0b8177388f36988ce6a1eb36195aaf777b60cd"
+    },
+    "notification-service": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-notification@sha256:55e46e0fe240ae52296ab8b3eb1a055a4c801213746883a2fc958d3d5fe4b29a"
+    },
+    "frontend": {
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-frontend@sha256:307005408d68c5be651fb58f191a70e469aa4cfaa28477c0e0aa3ea835364de2"
+    }
   }
 }
