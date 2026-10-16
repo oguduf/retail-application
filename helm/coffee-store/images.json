@@ -1,24 +1,24 @@
 {
-  "sourceRevision": "36f218e6d5e2c6fa24b7684016e9a8a70bf50658",
-  "sourceRun": "38919786024",
+  "sourceRevision": "392887cd84056e49bdb5d5c01c5913fc119ac9b8",
+  "sourceRun": "38921491754",
   "services": {
     "product-service": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-product@sha256:426ed317220dbfeefc768b3a931a739672f7c1e988467c2cc9405a6d91c3dbc7"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-product@sha256:a1f8232f130d63282ccbb550be82fb37aec00ffed8b196ac02cf67d8e3123916"
     },
     "inventory-service": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-inventory@sha256:7a0aa27918ae1224073e8c75f2f72beb2d4dc3f50590e8ef9bb8c6ffa60b237d"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-inventory@sha256:73f69b987cde693081b5e814166b930c84af228f3afb984e38ab417e529ce012"
     },
     "order-service": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:130c529981d8a22ce1facfd8a88c1e5f728943d2f6025da8c8f54d7083f9f6c3"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:11405d32238b4f0c05604f6380e242b29f99b20c08ba06f28af3987c5f66b9c8"
     },
     "order-outbox-relay": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:130c529981d8a22ce1facfd8a88c1e5f728943d2f6025da8c8f54d7083f9f6c3"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-order@sha256:11405d32238b4f0c05604f6380e242b29f99b20c08ba06f28af3987c5f66b9c8"
     },
     "notification-service": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-notification@sha256:2ebafb3e5d07264746d444f30fa562313fa8e9dccdc75fd381b9a62d08c9ccae"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-notification@sha256:dcee776a8f794bf671ad3734632d1b4f16e31a9f208c7245d6680942f0da8bd6"
     },
     "frontend": {
-      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-frontend@sha256:7a433deaacffb51aca8298d2446ff7dd55fefd0a13691ea96eab4c6a333553db"
+      "image": "866934333672.dkr.ecr.us-east-2.amazonaws.com/guduf-retail-eks-dev-frontend@sha256:c098ad7b251de967606f80434e4e01a0842828669ef768f48c06233f7c377671"
     }
   }
 }
