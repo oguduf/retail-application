@@ -9,6 +9,56 @@ const orderResult = document.querySelector("#order-result");
 let products = [];
 let stockBySku = {};
 
+const bagPalettes = {
+  "ETHIOPIA-YIRGACHEFFE": ["#c98d55", "#f1d6ad", "#8f5034"],
+  "COLOMBIA-HUILA": ["#58745f", "#d7dfbd", "#354b3e"],
+  "HOUSE-ESPRESSO": ["#714337", "#e8c09a", "#38241f"],
+  "DECAF-COLOMBIA": ["#8a7057", "#e5d6b9", "#584536"],
+  "SUMATRA-MANDELING": ["#59634c", "#d6c69f", "#343c30"],
+  "GUATEMALA-ANTIGUA": ["#b37342", "#f0d49f", "#79442b"],
+  "KENYA-AA": ["#a34e3e", "#f0c6a0", "#653229"],
+};
+
+function makeBag(product) {
+  const bag = document.createElement("div");
+  bag.className = "bag-model";
+  bag.setAttribute("aria-hidden", "true");
+  const [color, label, shade] = bagPalettes[product.sku] || ["#80543b", "#ead3b4", "#492f24"];
+  bag.style.setProperty("--bag-color", color);
+  bag.style.setProperty("--bag-label", label);
+  bag.style.setProperty("--bag-shade", shade);
+
+  for (const faceName of ["front", "back", "left", "right", "top", "bottom"]) {
+    const face = document.createElement("div");
+    face.className = `bag-face bag-${faceName}`;
+    if (faceName === "front") {
+      const seal = document.createElement("span");
+      seal.className = "bag-seal";
+      seal.textContent = "ROASTED FRESH · 12 OZ";
+      const mark = document.createElement("span");
+      mark.className = "bag-mark";
+      mark.textContent = "R";
+      const brand = document.createElement("span");
+      brand.className = "bag-brand";
+      brand.textContent = "ROAST & RELAY";
+      const name = document.createElement("span");
+      name.className = "bag-coffee";
+      name.textContent = product.name;
+      const origin = document.createElement("span");
+      origin.className = "bag-origin";
+      origin.textContent = product.origin;
+      const bottom = document.createElement("span");
+      bottom.className = "bag-bottom-label";
+      bottom.textContent = `${product.roast.toUpperCase()} ROAST · WHOLE BEAN`;
+      const valve = document.createElement("span");
+      valve.className = "bag-valve";
+      face.append(seal, mark, brand, name, origin, bottom, valve);
+    }
+    bag.append(face);
+  }
+  return bag;
+}
+
 async function getJson(url, options) {
   const response = await fetch(url, options);
   const body = await response.json().catch(() => ({}));
@@ -32,6 +82,7 @@ function renderProducts() {
     card.className = "product-card";
     const art = document.createElement("div");
     art.className = "coffee-art";
+    art.append(makeBag(product));
     const roast = document.createElement("span");
     roast.className = "roast-tag";
     roast.textContent = `${product.roast} roast`;
@@ -79,22 +130,26 @@ function enableBagTilt() {
   productGrid.addEventListener("pointermove", (event) => {
     if (event.pointerType !== "mouse") return;
     const art = event.target.closest(".coffee-art");
-    if (!art) return;
+    if (!art) {
+      for (const bag of productGrid.querySelectorAll(".bag-model")) {
+        bag.style.removeProperty("--bag-rotate-x");
+        bag.style.removeProperty("--bag-rotate-y");
+      }
+      return;
+    }
+    const bag = art.querySelector(".bag-model");
+    if (!bag) return;
     const bounds = art.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    art.style.setProperty("--art-rotate-y", `${x * 22}deg`);
-    art.style.setProperty("--art-rotate-x", `${y * -16}deg`);
-    art.style.setProperty("--bag-rotate-y", `${-8 + x * 20}deg`);
-    art.style.setProperty("--bag-rotate-x", `${4 + y * -16}deg`);
+    bag.style.setProperty("--bag-rotate-y", `${-22 + x * 52}deg`);
+    bag.style.setProperty("--bag-rotate-x", `${5 + y * -18}deg`);
   });
 
   productGrid.addEventListener("pointerleave", () => {
-    for (const art of productGrid.querySelectorAll(".coffee-art")) {
-      art.style.removeProperty("--art-rotate-x");
-      art.style.removeProperty("--art-rotate-y");
-      art.style.removeProperty("--bag-rotate-x");
-      art.style.removeProperty("--bag-rotate-y");
+    for (const bag of productGrid.querySelectorAll(".bag-model")) {
+      bag.style.removeProperty("--bag-rotate-x");
+      bag.style.removeProperty("--bag-rotate-y");
     }
   });
 }

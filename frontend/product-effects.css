@@ -3,25 +3,191 @@
 }
 
 .coffee-art {
-  perspective: 700px;
-  transform: rotateX(var(--art-rotate-x, 3deg)) rotateY(var(--art-rotate-y, -5deg));
+  height: 190px;
+  perspective: 800px;
   transform-style: preserve-3d;
-  transition: transform 180ms ease-out;
-  --bag-rotate-x: 4deg;
-  --bag-rotate-y: -8deg;
+  overflow: hidden;
 }
 
-.coffee-art::before {
-  transform: translateZ(8px) rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
-  transition: transform 180ms ease-out;
-  transform-style: preserve-3d;
-  box-shadow: 8px 7px 0 #3e281e, 14px 16px 22px #5f493833;
-}
-
+.coffee-art::before,
 .coffee-art::after {
-  transform: translateY(-50%) translateZ(14px) rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
-  transition: transform 180ms ease-out;
+  content: none;
+}
+
+.bag-model {
+  --bag-depth: 12px;
+  --bag-rotate-x: 5deg;
+  --bag-rotate-y: -22deg;
+  width: 92px;
+  height: 132px;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
+  transition: transform 220ms cubic-bezier(.2,.75,.25,1);
+  filter: drop-shadow(10px 13px 8px #34271e35);
+}
+
+.bag-face {
+  position: absolute;
+  backface-visibility: hidden;
+  border: 1px solid #ffffff40;
+}
+
+.bag-front,
+.bag-back {
+  inset: 0;
+  width: 92px;
+  height: 132px;
+  border-radius: 8px 8px 12px 12px;
+}
+
+.bag-front {
+  z-index: 2;
+  transform: translateZ(var(--bag-depth));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--bag-shade);
+  background:
+    linear-gradient(90deg, #ffffff30 0, transparent 15%, transparent 78%, #00000015 100%),
+    linear-gradient(155deg, var(--bag-color), color-mix(in srgb, var(--bag-color), #251914 38%));
+  box-shadow: inset 3px 0 5px #ffffff22, inset -4px 0 7px #24171025;
+}
+
+.bag-front::before,
+.bag-front::after {
+  content: "";
+  position: absolute;
   pointer-events: none;
+}
+
+.bag-front::before {
+  inset: 6px 5px auto;
+  height: 3px;
+  border-top: 1px solid #ffffff70;
+  border-bottom: 1px solid #24171045;
+}
+
+.bag-front::after {
+  width: 16px;
+  height: 100%;
+  right: 5px;
+  top: 0;
+  background: linear-gradient(90deg, transparent, #ffffff18, transparent);
+  transform: skewY(-7deg);
+}
+
+.bag-back {
+  transform: rotateY(180deg) translateZ(var(--bag-depth));
+  background: linear-gradient(110deg, color-mix(in srgb, var(--bag-color), #1e1713 38%), var(--bag-color));
+}
+
+.bag-left,
+.bag-right {
+  top: 0;
+  width: calc(var(--bag-depth) * 2);
+  height: 132px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bag-color), #211711 48%), var(--bag-color));
+}
+
+.bag-left {
+  left: calc(46px - var(--bag-depth));
+  transform: rotateY(-90deg) translateZ(46px);
+}
+
+.bag-right {
+  left: calc(46px - var(--bag-depth));
+  transform: rotateY(90deg) translateZ(46px);
+  background: linear-gradient(90deg, var(--bag-color), color-mix(in srgb, var(--bag-color), #211711 55%));
+}
+
+.bag-top,
+.bag-bottom {
+  left: 0;
+  width: 92px;
+  height: calc(var(--bag-depth) * 2);
+  background: linear-gradient(#ffffff20, #00000020), var(--bag-color);
+}
+
+.bag-top {
+  top: calc(66px - var(--bag-depth));
+  transform: rotateX(90deg) translateZ(66px);
+}
+
+.bag-bottom {
+  top: calc(66px - var(--bag-depth));
+  transform: rotateX(-90deg) translateZ(66px);
+}
+
+.bag-seal {
+  width: 100%;
+  height: 15px;
+  padding-top: 8px;
+  border-bottom: 1px solid #ffffff55;
+  color: #fff8e9;
+  font-size: 5px;
+  letter-spacing: .12em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.bag-mark {
+  width: 22px;
+  height: 22px;
+  margin-top: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--bag-label), #ffffff 45%);
+  border-radius: 50%;
+  color: var(--bag-label);
+  font: 600 14px Georgia, serif;
+}
+
+.bag-brand {
+  margin-top: 4px;
+  color: #fff8e9;
+  font: 600 6px "DM Sans", sans-serif;
+  letter-spacing: .15em;
+}
+
+.bag-coffee {
+  max-width: 80px;
+  margin: 8px 4px 0;
+  color: var(--bag-label);
+  font: 600 9px/1.05 "Playfair Display", Georgia, serif;
+  text-align: center;
+}
+
+.bag-origin {
+  max-width: 78px;
+  margin-top: 3px;
+  color: #fff5df;
+  font: 5px/1.2 "DM Sans", sans-serif;
+  text-align: center;
+}
+
+.bag-bottom-label {
+  width: 100%;
+  margin-top: auto;
+  padding: 5px 2px;
+  background: color-mix(in srgb, var(--bag-label), transparent 12%);
+  color: var(--bag-shade);
+  font: 600 5px "DM Sans", sans-serif;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.bag-valve {
+  position: absolute;
+  right: 9px;
+  bottom: 19px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #fff8e9aa;
+  border-radius: 50%;
+  background: #271d18;
+  box-shadow: 0 0 0 2px #ffffff22;
 }
 
 .product-card .product-origin {
@@ -33,8 +199,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .coffee-art::before,
-  .coffee-art::after {
+  .bag-model {
     transition: none;
   }
 }
