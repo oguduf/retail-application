@@ -273,6 +273,11 @@ jobs:
                   kind: "Deployment",
                   namespace: "coffee-store",
                   jsonPointers: ["/spec/replicas"]
+                }, {
+                  group: "*",
+                  kind: "*",
+                  namespace: "coffee-store",
+                  jsonPointers: ["/metadata/annotations/argocd.argoproj.io~1tracking-id"]
                 }],
                 syncPolicy: {
                   syncOptions: ["CreateNamespace=true", "RespectIgnoreDifferences=true"]
