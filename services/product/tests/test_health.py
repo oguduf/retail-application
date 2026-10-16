@@ -20,4 +20,7 @@ def test_list_products() -> None:
     assert len(response.json()) == 7
     assert response.json()[0]["sku"] == "ETHIOPIA-YIRGACHEFFE"
     assert response.json()[0]["origin"] == "Yirgacheffe, Ethiopia"
+    assert response.json()[0]["size_prices"] == {"12 oz": 18.5, "2 lb": 44.4}
+    assert response.json()[0]["tasting_notes"] == ["Citrus", "Jasmine", "Black tea"]
+    assert response.json()[0]["recommended_brew"] == "Pour-over"
     assert response.json()[-1]["sku"] == "KENYA-AA"

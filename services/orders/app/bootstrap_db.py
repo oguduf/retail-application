@@ -46,10 +46,14 @@ def main():
                     product_name TEXT NOT NULL,
                     quantity INTEGER NOT NULL,
                     unit_price DOUBLE PRECISION NOT NULL,
+                    bag_size TEXT NOT NULL DEFAULT '12 oz',
+                    grind TEXT NOT NULL DEFAULT 'Whole bean',
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )"""
             )
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS bag_size TEXT NOT NULL DEFAULT '12 oz'")
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS grind TEXT NOT NULL DEFAULT 'Whole bean'")
             cursor.execute(
                 """CREATE TABLE IF NOT EXISTS event_outbox (
                     event_id TEXT PRIMARY KEY,
