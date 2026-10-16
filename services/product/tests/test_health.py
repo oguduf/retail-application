@@ -17,5 +17,7 @@ def test_list_products() -> None:
     response = client.get("/products")
 
     assert response.status_code == 200
-    assert len(response.json()) == 4
+    assert len(response.json()) == 7
     assert response.json()[0]["sku"] == "ETHIOPIA-YIRGACHEFFE"
+    assert response.json()[0]["origin"] == "Yirgacheffe, Ethiopia"
+    assert response.json()[-1]["sku"] == "KENYA-AA"

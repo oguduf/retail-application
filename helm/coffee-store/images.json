@@ -1,0 +1,12 @@
+{
+  "sourceRevision": "pending-first-image-publish",
+  "sourceRun": "",
+  "services": {
+    "product-service": { "image": "example.invalid/product:replace-me" },
+    "inventory-service": { "image": "example.invalid/inventory:replace-me" },
+    "order-service": { "image": "example.invalid/order:replace-me" },
+    "order-outbox-relay": { "image": "example.invalid/order:replace-me" },
+    "notification-service": { "image": "example.invalid/notification:replace-me" },
+    "frontend": { "image": "example.invalid/frontend:replace-me" }
+  }
+}

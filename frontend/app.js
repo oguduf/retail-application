@@ -35,6 +35,9 @@ function renderProducts() {
     const roast = document.createElement("span");
     roast.className = "roast-tag";
     roast.textContent = `${product.roast} roast`;
+    const origin = document.createElement("p");
+    origin.className = "product-origin";
+    origin.textContent = `Origin · ${product.origin}`;
     const name = document.createElement("h3");
     name.textContent = product.name;
     const description = document.createElement("p");
@@ -50,7 +53,7 @@ function renderProducts() {
       ? "Stock unavailable"
       : `${stockBySku[product.sku]} bags available`;
     meta.append(price, stock);
-    card.append(art, roast, name, description, meta);
+    card.append(art, roast, origin, name, description, meta);
     productGrid.append(card);
 
     const option = document.createElement("option");
@@ -68,6 +71,28 @@ async function loadCatalog() {
   } catch (error) {
     showCatalogError(`Catalog unavailable: ${error.message}`);
   }
+}
+
+function enableBagTilt() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  productGrid.addEventListener("pointermove", (event) => {
+    if (event.pointerType !== "mouse") return;
+    const art = event.target.closest(".coffee-art");
+    if (!art) return;
+    const bounds = art.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    art.style.setProperty("--bag-rotate-y", `${x * 16}deg`);
+    art.style.setProperty("--bag-rotate-x", `${y * -12}deg`);
+  });
+
+  productGrid.addEventListener("pointerleave", () => {
+    for (const art of productGrid.querySelectorAll(".coffee-art")) {
+      art.style.removeProperty("--bag-rotate-x");
+      art.style.removeProperty("--bag-rotate-y");
+    }
+  });
 }
 
 async function loadInventory() {
@@ -157,6 +182,7 @@ document.querySelector("#order-form").addEventListener("submit", async (event) =
 document.querySelector("#refresh-orders").addEventListener("click", loadOrders);
 
 loadCatalog();
+enableBagTilt();
 loadInventory();
 loadOrders();
 loadNotifications();

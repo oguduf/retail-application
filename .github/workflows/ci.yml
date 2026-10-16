@@ -10,8 +10,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: coffee-store-ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out application repository
@@ -55,8 +60,10 @@ jobs:
         run: |
           helm lint helm/coffee-store --strict
           helm template coffee-store helm/coffee-store --namespace coffee-store > /tmp/coffee-store-rendered.yaml
+          helm template coffee-store helm/coffee-store --namespace coffee-store --values helm/coffee-store/images.json > /tmp/coffee-store-images-rendered.yaml
 
   image-scan:
+    if: ${{ github.actor != 'github-actions[bot]' && (github.event_name != 'push' || github.ref != 'refs/heads/dev') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out application repository
@@ -81,3 +88,178 @@ jobs:
             docker build --tag "$image" "$directory"
             trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
           done
+
+  publish-images:
+    if: ${{ github.actor != 'github-actions[bot]' && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: [test]
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    concurrency:
+      group: coffee-store-image-publish-dev
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+    steps:
+      - name: Check out application repository
+        uses: actions/checkout@v6
+
+      - name: Require successful security checks for this commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            runs="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow security.yml --commit "$GITHUB_SHA" --event push \
+              --json headSha,status,conclusion --limit 100)"
+            matching_run="$(jq -c --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.headSha == $sha)] | first // empty' <<< "$runs")"
+            if [[ -n "$matching_run" ]]; then
+              status="$(jq -r '.status' <<< "$matching_run")"
+              if [[ "$status" == completed ]]; then
+                conclusion="$(jq -r '.conclusion' <<< "$matching_run")"
+                if [[ "$conclusion" == success ]]; then
+                  echo "Security checks passed for $GITHUB_SHA."
+                  exit 0
+                fi
+                echo "::error::Security checks for $GITHUB_SHA completed with conclusion: $conclusion"
+                exit 1
+              fi
+            fi
+            echo "Waiting for the Security checks workflow for $GITHUB_SHA (attempt $attempt/60)."
+            sleep 10
+          done
+          echo "::error::Timed out waiting for Security checks for $GITHUB_SHA."
+          exit 1
+
+      - name: Validate image publishing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AWS_REGION AWS_ROLE_ARN PROJECT_NAME ENVIRONMENT; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing GitHub Actions variable: $name"
+              exit 1
+            fi
+          done
+          if [[ "$ENVIRONMENT" != "dev" ]]; then
+            echo "::error::This image publishing workflow is restricted to dev."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: RoastRelayCoffeeStoreImagePublish
+
+      - name: Set up Trivy for image scans
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+
+      - name: Set up Helm for release validation
+        uses: azure/setup-helm@v4.3.0
+
+      - name: Build and scan application images
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+          image_tag="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for service in product inventory order notification frontend; do
+            case "$service" in
+              product) directory=services/product ;;
+              inventory) directory=services/inventory ;;
+              order) directory=services/orders ;;
+              notification) directory=services/notifications ;;
+              frontend) directory=frontend ;;
+            esac
+            repository="${PROJECT_NAME}-${ENVIRONMENT}-${service}"
+            image="${registry}/${repository}:${image_tag}"
+            docker build --tag "$image" "$directory"
+            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+          echo "ECR_REGISTRY=$registry" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
+
+      - name: Push scanned images and capture immutable digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for service in product inventory order notification frontend; do
+            repository="${PROJECT_NAME}-${ENVIRONMENT}-${service}"
+            image="${ECR_REGISTRY}/${repository}:${IMAGE_TAG}"
+            push_output="$(docker push "$image" 2>&1)" || {
+              printf '%s\n' "$push_output"
+              exit 1
+            }
+            printf '%s\n' "$push_output"
+            digest="$(printf '%s\n' "$push_output" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n 1)"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Could not read the pushed digest for $repository."
+              exit 1
+            fi
+            case "$service" in
+              product) image_key=PRODUCT_IMAGE_REF ;;
+              inventory) image_key=INVENTORY_IMAGE_REF ;;
+              order) image_key=ORDER_IMAGE_REF ;;
+              notification) image_key=NOTIFICATION_IMAGE_REF ;;
+              frontend) image_key=FRONTEND_IMAGE_REF ;;
+            esac
+            printf '%s=%s\n' "$image_key" "${ECR_REGISTRY}/${repository}@${digest}" >> "$GITHUB_ENV"
+          done
+
+      - name: Write image digests to the Argo CD watched chart values
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg sourceRevision "$GITHUB_SHA" \
+            --arg sourceRun "$GITHUB_RUN_ID" \
+            --arg product "$PRODUCT_IMAGE_REF" \
+            --arg inventory "$INVENTORY_IMAGE_REF" \
+            --arg order "$ORDER_IMAGE_REF" \
+            --arg notification "$NOTIFICATION_IMAGE_REF" \
+            --arg frontend "$FRONTEND_IMAGE_REF" \
+            '{sourceRevision: $sourceRevision, sourceRun: $sourceRun, services: {
+              "product-service": {image: $product},
+              "inventory-service": {image: $inventory},
+              "order-service": {image: $order},
+              "order-outbox-relay": {image: $order},
+              "notification-service": {image: $notification},
+              frontend: {image: $frontend}
+            }}' > "$RUNNER_TEMP/coffee-store-images.json"
+
+          helm template coffee-store helm/coffee-store \
+            --namespace coffee-store \
+            --values "$RUNNER_TEMP/coffee-store-images.json" > /dev/null
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset --hard FETCH_HEAD
+            cp "$RUNNER_TEMP/coffee-store-images.json" helm/coffee-store/images.json
+            git add helm/coffee-store/images.json
+            if git diff --cached --quiet; then
+              echo "Image references already match the published digests."
+              exit 0
+            fi
+            git commit -m "chore: update dev image digests for ${GITHUB_SHA:0:7} [skip ci]"
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Committed image digests to helm/coffee-store/images.json. Argo CD will auto-sync this Git change."
+              exit 0
+            fi
+            echo "Branch advanced during the push; retrying from its latest commit."
+          done
+          echo "::error::Could not push image digest values after three attempts."
+          exit 1

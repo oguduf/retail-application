@@ -14,6 +14,7 @@ class Product(BaseModel):
     price: float
     description: str
     roast: str
+    origin: str
 
 
 PRODUCTS_FILE = Path(__file__).parent.parent / "data" / "products.json"

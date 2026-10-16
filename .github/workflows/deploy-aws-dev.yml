@@ -1,4 +1,4 @@
-name: Deploy Coffee Store to EKS
+name: Configure Coffee Store Argo CD
 
 on:
   workflow_dispatch:
@@ -9,26 +9,6 @@ permissions:
 concurrency:
   group: coffee-store-aws-dev
   cancel-in-progress: false
-
-env:
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
-  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-  ENVIRONMENT: ${{ vars.ENVIRONMENT }}
-  ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
-  DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
-  EVENT_BUS_NAME: ${{ vars.ORDER_EVENT_BUS_NAME }}
-  ORDER_NOTIFICATION_QUEUE_URL: ${{ vars.ORDER_NOTIFICATION_QUEUE_URL }}
-  ORDER_NOTIFICATION_TOPIC_ARN: ${{ vars.ORDER_NOTIFICATION_TOPIC_ARN }}
-  ORDER_SERVICE_ROLE_ARN: ${{ vars.ORDER_SERVICE_ROLE_ARN }}
-  ORDER_DB_MIGRATOR_ROLE_ARN: ${{ vars.ORDER_DB_MIGRATOR_ROLE_ARN }}
-  INVENTORY_SERVICE_ROLE_ARN: ${{ vars.INVENTORY_SERVICE_ROLE_ARN }}
-  NOTIFICATION_SERVICE_ROLE_ARN: ${{ vars.NOTIFICATION_SERVICE_ROLE_ARN }}
-  ORDERS_DATABASE_HOST: ${{ vars.ORDERS_DATABASE_HOST }}
-  ORDERS_DATABASE_SECRET_ARN: ${{ vars.ORDERS_DATABASE_SECRET_ARN }}
-  # Include the workflow run ID so a fresh dispatch of the same commit gets a new immutable ECR tag.
-  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   verify:
@@ -45,7 +25,30 @@ jobs:
             exit 1
           fi
 
-      - name: Require successful CI and security checks for this commit
+      - name: Check out application repository
+        uses: actions/checkout@v6
+
+      - name: Validate published Git image references
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_revision="$(jq -er '.sourceRevision' helm/coffee-store/images.json)"
+          if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No CI-published image revision is recorded in helm/coffee-store/images.json. Push to dev and wait for CI image publishing to finish first."
+            exit 1
+          fi
+          jq -e '
+            [.services["product-service"].image,
+             .services["inventory-service"].image,
+             .services["order-service"].image,
+             .services["order-outbox-relay"].image,
+             .services["notification-service"].image,
+             .services.frontend.image]
+            | all(.[]; test("@sha256:[0-9a-f]{64}$"))
+          ' helm/coffee-store/images.json >/dev/null
+          echo "SOURCE_REVISION=$source_revision" >> "$GITHUB_ENV"
+
+      - name: Require successful CI and security checks for the published source commit
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,11 +56,11 @@ jobs:
           set -euo pipefail
           for workflow in ci.yml security.yml; do
             if ! gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow "$workflow" --commit "$GITHUB_SHA" \
+              --workflow "$workflow" --commit "$SOURCE_REVISION" \
               --event push --status success \
               --json headSha,conclusion --limit 100 |
-              jq -e --arg sha "$GITHUB_SHA" 'any(.[]; .headSha == $sha and .conclusion == "success")' >/dev/null; then
-              echo "::error::No successful push run of $workflow was found for commit $GITHUB_SHA."
+              jq -e --arg sha "$SOURCE_REVISION" 'any(.[]; .headSha == $sha and .conclusion == "success")' >/dev/null; then
+              echo "::error::No successful push run of $workflow was found for source revision $SOURCE_REVISION."
               exit 1
             fi
           done
@@ -67,6 +70,23 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: dev
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+      ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+      DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+      EVENT_BUS_NAME: ${{ vars.ORDER_EVENT_BUS_NAME }}
+      ORDER_NOTIFICATION_QUEUE_URL: ${{ vars.ORDER_NOTIFICATION_QUEUE_URL }}
+      ORDER_NOTIFICATION_TOPIC_ARN: ${{ vars.ORDER_NOTIFICATION_TOPIC_ARN }}
+      ORDER_SERVICE_ROLE_ARN: ${{ vars.ORDER_SERVICE_ROLE_ARN }}
+      ORDER_DB_MIGRATOR_ROLE_ARN: ${{ vars.ORDER_DB_MIGRATOR_ROLE_ARN }}
+      INVENTORY_SERVICE_ROLE_ARN: ${{ vars.INVENTORY_SERVICE_ROLE_ARN }}
+      NOTIFICATION_SERVICE_ROLE_ARN: ${{ vars.NOTIFICATION_SERVICE_ROLE_ARN }}
+      ORDERS_DATABASE_HOST: ${{ vars.ORDERS_DATABASE_HOST }}
+      ORDERS_DATABASE_SECRET_ARN: ${{ vars.ORDERS_DATABASE_SECRET_ARN }}
     permissions:
       contents: read
       id-token: write
@@ -91,109 +111,15 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: RoastRelayCoffeeStoreDeploy
 
-      - name: Set up Trivy for image scans
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-
-      - name: Build and scan all five application images
-        shell: bash
-        run: |
-          registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
-          for service in product inventory order notification frontend; do
-            case "$service" in
-              product) directory=services/product ;;
-              inventory) directory=services/inventory ;;
-              order) directory=services/orders ;;
-              notification) directory=services/notifications ;;
-              frontend) directory=frontend ;;
-            esac
-            image="${registry}/${PROJECT_NAME}-${ENVIRONMENT}-${service}:${IMAGE_TAG}"
-            docker build --tag "$image" "$directory"
-            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
-          done
-          echo "ECR_REGISTRY=$registry" >> "$GITHUB_ENV"
-
-      - name: Push scanned application images
-        shell: bash
-        run: |
-          for service in product inventory order notification frontend; do
-            repository="${PROJECT_NAME}-${ENVIRONMENT}-${service}"
-            image="${ECR_REGISTRY}/${repository}:${IMAGE_TAG}"
-            push_output="$(docker push "$image" 2>&1)"
-            printf '%s\n' "$push_output"
-            digest="$(printf '%s\n' "$push_output" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n 1)"
-            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "Could not read the pushed image digest for $repository" >&2
-              exit 1
-            fi
-            case "$service" in
-              product) image_variable=PRODUCT_IMAGE_REF ;;
-              inventory) image_variable=INVENTORY_IMAGE_REF ;;
-              order) image_variable=ORDER_IMAGE_REF ;;
-              notification) image_variable=NOTIFICATION_IMAGE_REF ;;
-              frontend) image_variable=FRONTEND_IMAGE_REF ;;
-            esac
-            printf '%s=%s\n' "$image_variable" "${ECR_REGISTRY}/${repository}@${digest}" >> "$GITHUB_ENV"
-          done
-
       - name: Set up kubectl
         uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
         with:
           version: v1.36.1
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4.3.0
-
       - name: Connect to Amazon EKS
         run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
-      - name: Install Metrics Server for HPA metrics
-        shell: bash
-        run: |
-          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-          helm repo update metrics-server
-          helm upgrade --install metrics-server metrics-server/metrics-server \
-            --version 3.14.0 --namespace kube-system --set replicas=2 --wait --timeout 5m
-
-      - name: Install Vertical Pod Autoscaler
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clone --depth 1 --branch vertical-pod-autoscaler-1.7.1 https://github.com/kubernetes/autoscaler.git /tmp/kubernetes-autoscaler
-          cd /tmp/kubernetes-autoscaler/vertical-pod-autoscaler
-          ./hack/vpa-up.sh
-          kubectl rollout status deployment/vpa-recommender --namespace kube-system --timeout=5m
-          kubectl rollout status deployment/vpa-updater --namespace kube-system --timeout=5m
-          kubectl rollout status deployment/vpa-admission-controller --namespace kube-system --timeout=5m
-
-      - name: Deploy application with Helm
-        shell: bash
-        run: |
-          helm upgrade --install coffee-store ./helm/coffee-store \
-            --namespace coffee-store --create-namespace --wait --timeout 10m \
-            --set-string project="$PROJECT_NAME" \
-            --set-string environment="$ENVIRONMENT" \
-            --set-string awsRegion="$AWS_REGION" \
-            --set-string domainName="$DOMAIN_NAME" \
-            --set-string certificateArn="$ACM_CERTIFICATE_ARN" \
-            --set-string serviceAccounts.orderRoleArn="$ORDER_SERVICE_ROLE_ARN" \
-            --set-string serviceAccounts.orderMigratorRoleArn="$ORDER_DB_MIGRATOR_ROLE_ARN" \
-            --set-string serviceAccounts.inventoryRoleArn="$INVENTORY_SERVICE_ROLE_ARN" \
-            --set-string serviceAccounts.notificationRoleArn="$NOTIFICATION_SERVICE_ROLE_ARN" \
-            --set-string orders.databaseHost="$ORDERS_DATABASE_HOST" \
-            --set-string database.host="$ORDERS_DATABASE_HOST" \
-            --set-string orders.databaseSecretArn="$ORDERS_DATABASE_SECRET_ARN" \
-            --set-string orders.eventBusName="$EVENT_BUS_NAME" \
-            --set-string notifications.queueUrl="$ORDER_NOTIFICATION_QUEUE_URL" \
-            --set-string notifications.topicArn="$ORDER_NOTIFICATION_TOPIC_ARN" \
-            --set-string services.product-service.image="$PRODUCT_IMAGE_REF" \
-            --set-string services.inventory-service.image="$INVENTORY_IMAGE_REF" \
-            --set-string services.order-service.image="$ORDER_IMAGE_REF" \
-            --set-string services.order-outbox-relay.image="$ORDER_IMAGE_REF" \
-            --set-string services.notification-service.image="$NOTIFICATION_IMAGE_REF" \
-            --set-string services.frontend.image="$FRONTEND_IMAGE_REF"
-
-      - name: Register Coffee Store with Argo CD (manual sync)
+      - name: Configure Coffee Store for Argo CD auto-sync
         shell: bash
         run: |
           set -euo pipefail
@@ -213,11 +139,6 @@ jobs:
             --arg eventBusName "$EVENT_BUS_NAME" \
             --arg notificationQueueUrl "$ORDER_NOTIFICATION_QUEUE_URL" \
             --arg notificationTopicArn "$ORDER_NOTIFICATION_TOPIC_ARN" \
-            --arg productImage "$PRODUCT_IMAGE_REF" \
-            --arg inventoryImage "$INVENTORY_IMAGE_REF" \
-            --arg orderImage "$ORDER_IMAGE_REF" \
-            --arg notificationImage "$NOTIFICATION_IMAGE_REF" \
-            --arg frontendImage "$FRONTEND_IMAGE_REF" \
             '{
               apiVersion: "argoproj.io/v1alpha1",
               kind: "Application",
@@ -230,6 +151,7 @@ jobs:
                   path: "helm/coffee-store",
                   helm: {
                     releaseName: "coffee-store",
+                    valueFiles: ["images.json"],
                     valuesObject: {
                       project: $project,
                       environment: $environment,
@@ -252,14 +174,6 @@ jobs:
                       notifications: {
                         queueUrl: $notificationQueueUrl,
                         topicArn: $notificationTopicArn
-                      },
-                      services: {
-                        "product-service": {image: $productImage},
-                        "inventory-service": {image: $inventoryImage},
-                        "order-service": {image: $orderImage},
-                        "order-outbox-relay": {image: $orderImage},
-                        "notification-service": {image: $notificationImage},
-                        frontend: {image: $frontendImage}
                       }
                     }
                   }
@@ -280,38 +194,19 @@ jobs:
                   jsonPointers: ["/metadata/annotations/argocd.argoproj.io~1tracking-id"]
                 }],
                 syncPolicy: {
+                  automated: {enabled: true, selfHeal: true, prune: false},
                   syncOptions: ["CreateNamespace=true", "RespectIgnoreDifferences=true"]
                 }
               }
             }')"
 
           printf '%s\n' "$application" | kubectl apply --filename -
-          kubectl get application coffee-store --namespace argocd \
-            --output custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status'
+          kubectl wait --for=jsonpath='{.status.sync.status}'=Synced \
+            application/coffee-store --namespace argocd --timeout=10m
+          kubectl wait --for=jsonpath='{.status.health.status}'=Healthy \
+            application/coffee-store --namespace argocd --timeout=10m
 
-      - name: Diagnose failed application deployment
-        if: ${{ failure() }}
-        shell: bash
-        run: |
-          set +e
-          echo '=== Deployments and Pods ==='
-          kubectl -n coffee-store get deployments,pods -o wide
-          echo '=== Recent namespace events ==='
-          kubectl -n coffee-store get events --sort-by=.lastTimestamp | tail -n 80
-          echo '=== Pod details and logs ==='
-          for pod in $(kubectl -n coffee-store get pods -o name); do
-            echo "=== $pod: details ==="
-            kubectl -n coffee-store describe "$pod"
-            echo "=== $pod: current logs ==="
-            kubectl -n coffee-store logs "$pod" --all-containers=true --tail=100
-            echo "=== $pod: previous logs ==="
-            kubectl -n coffee-store logs "$pod" --all-containers=true --previous --tail=100
-          done
-          echo '=== Database migration Job ==='
-          kubectl -n coffee-store describe job coffee-store-orders-db-migration
-          exit 0
-
-      - name: Verify application rollouts
+      - name: Verify Argo CD-managed application rollouts
         shell: bash
         run: |
           for deployment in product-service inventory-service order-service order-outbox-relay notification-service frontend; do

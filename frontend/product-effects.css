@@ -1,0 +1,30 @@
+.coffee-art {
+  perspective: 700px;
+}
+
+.coffee-art::before {
+  transform: rotateX(var(--bag-rotate-x, 0deg)) rotateY(var(--bag-rotate-y, 0deg));
+  transition: transform 180ms ease-out;
+  transform-style: preserve-3d;
+}
+
+.coffee-art::after {
+  transform: translateY(-50%) rotateX(var(--bag-rotate-x, 0deg)) rotateY(var(--bag-rotate-y, 0deg));
+  transition: transform 180ms ease-out;
+  pointer-events: none;
+}
+
+.product-card .product-origin {
+  min-height: 0;
+  margin: 7px 0 3px;
+  color: var(--rust);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coffee-art::before,
+  .coffee-art::after {
+    transition: none;
+  }
+}

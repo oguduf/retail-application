@@ -4,27 +4,55 @@
     "name": "Ethiopia Yirgacheffe",
     "price": 18.5,
     "description": "Bright citrus and jasmine notes. Whole bean, 12 oz.",
-    "roast": "Light"
+    "roast": "Light",
+    "origin": "Yirgacheffe, Ethiopia"
   },
   {
     "sku": "COLOMBIA-HUILA",
     "name": "Colombia Huila",
     "price": 17.0,
     "description": "Caramel sweetness with a smooth cocoa finish. Whole bean, 12 oz.",
-    "roast": "Medium"
+    "roast": "Medium",
+    "origin": "Huila, Colombia"
   },
   {
     "sku": "HOUSE-ESPRESSO",
     "name": "House Espresso",
     "price": 16.0,
     "description": "A balanced blend made for espresso and milk drinks. Whole bean, 12 oz.",
-    "roast": "Dark"
+    "roast": "Dark",
+    "origin": "House blend"
   },
   {
     "sku": "DECAF-COLOMBIA",
     "name": "Decaf Colombia",
     "price": 17.5,
     "description": "Sugar cane decaffeinated with notes of toffee and orange. Whole bean, 12 oz.",
-    "roast": "Medium"
+    "roast": "Medium",
+    "origin": "Colombia"
+  },
+  {
+    "sku": "SUMATRA-MANDELING",
+    "name": "Sumatra Mandheling",
+    "price": 18.0,
+    "description": "Full-bodied and earthy with dark chocolate notes. Whole bean, 12 oz.",
+    "roast": "Dark",
+    "origin": "North Sumatra, Indonesia"
+  },
+  {
+    "sku": "GUATEMALA-ANTIGUA",
+    "name": "Guatemala Antigua",
+    "price": 18.0,
+    "description": "Cocoa and toasted almond with a gentle citrus finish. Whole bean, 12 oz.",
+    "roast": "Medium",
+    "origin": "Antigua, Guatemala"
+  },
+  {
+    "sku": "KENYA-AA",
+    "name": "Kenya AA",
+    "price": 19.0,
+    "description": "Juicy berry and bright citrus with a clean finish. Whole bean, 12 oz.",
+    "roast": "Light",
+    "origin": "Kenya"
   }
 ]
