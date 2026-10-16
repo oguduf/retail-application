@@ -83,12 +83,16 @@ function enableBagTilt() {
     const bounds = art.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    art.style.setProperty("--art-rotate-y", `${x * 22}deg`);
+    art.style.setProperty("--art-rotate-x", `${y * -16}deg`);
     art.style.setProperty("--bag-rotate-y", `${-8 + x * 20}deg`);
     art.style.setProperty("--bag-rotate-x", `${4 + y * -16}deg`);
   });
 
   productGrid.addEventListener("pointerleave", () => {
     for (const art of productGrid.querySelectorAll(".coffee-art")) {
+      art.style.removeProperty("--art-rotate-x");
+      art.style.removeProperty("--art-rotate-y");
       art.style.removeProperty("--bag-rotate-x");
       art.style.removeProperty("--bag-rotate-y");
     }

@@ -1,5 +1,12 @@
+.product-card {
+  perspective: 1000px;
+}
+
 .coffee-art {
   perspective: 700px;
+  transform: rotateX(var(--art-rotate-x, 3deg)) rotateY(var(--art-rotate-y, -5deg));
+  transform-style: preserve-3d;
+  transition: transform 180ms ease-out;
   --bag-rotate-x: 4deg;
   --bag-rotate-y: -8deg;
 }
