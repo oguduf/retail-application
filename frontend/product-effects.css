@@ -1,15 +1,18 @@
 .coffee-art {
   perspective: 700px;
+  --bag-rotate-x: 4deg;
+  --bag-rotate-y: -8deg;
 }
 
 .coffee-art::before {
-  transform: rotateX(var(--bag-rotate-x, 0deg)) rotateY(var(--bag-rotate-y, 0deg));
+  transform: translateZ(8px) rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
   transition: transform 180ms ease-out;
   transform-style: preserve-3d;
+  box-shadow: 8px 7px 0 #3e281e, 14px 16px 22px #5f493833;
 }
 
 .coffee-art::after {
-  transform: translateY(-50%) rotateX(var(--bag-rotate-x, 0deg)) rotateY(var(--bag-rotate-y, 0deg));
+  transform: translateY(-50%) translateZ(14px) rotateX(var(--bag-rotate-x)) rotateY(var(--bag-rotate-y));
   transition: transform 180ms ease-out;
   pointer-events: none;
 }

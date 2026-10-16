@@ -83,8 +83,8 @@ function enableBagTilt() {
     const bounds = art.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    art.style.setProperty("--bag-rotate-y", `${x * 16}deg`);
-    art.style.setProperty("--bag-rotate-x", `${y * -12}deg`);
+    art.style.setProperty("--bag-rotate-y", `${-8 + x * 20}deg`);
+    art.style.setProperty("--bag-rotate-x", `${4 + y * -16}deg`);
   });
 
   productGrid.addEventListener("pointerleave", () => {
