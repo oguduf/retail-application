@@ -15,6 +15,11 @@ def test_inventory_reservations_are_idempotent_in_local_sqlite(tmp_path, monkeyp
     client = TestClient(inventory_service.app)
 
     assert client.get("/ready").status_code == 200
+    stock = {item["sku"]: item["quantity"] for item in client.get("/inventory").json()}
+    assert stock["SUMATRA-MANDELING"] == 20
+    assert stock["GUATEMALA-ANTIGUA"] == 18
+    assert stock["KENYA-AA"] == 22
+
     first = client.post(
         "/inventory/reservations",
         json={"order_id": "test-order", "sku": "ETHIOPIA-YIRGACHEFFE", "quantity": 2},

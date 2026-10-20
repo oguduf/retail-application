@@ -3,28 +3,77 @@
     "sku": "ETHIOPIA-YIRGACHEFFE",
     "name": "Ethiopia Yirgacheffe",
     "price": 18.5,
-    "description": "Bright citrus and jasmine notes. Whole bean, 12 oz.",
-    "roast": "Light"
+    "size_prices": {"12 oz": 18.5, "2 lb": 44.4},
+    "description": "A bright, floral cup with a delicate tea-like finish.",
+    "tasting_notes": ["Citrus", "Jasmine", "Black tea"],
+    "recommended_brew": "Pour-over",
+    "roast": "Light",
+    "origin": "Yirgacheffe, Ethiopia"
   },
   {
     "sku": "COLOMBIA-HUILA",
     "name": "Colombia Huila",
     "price": 17.0,
-    "description": "Caramel sweetness with a smooth cocoa finish. Whole bean, 12 oz.",
-    "roast": "Medium"
+    "size_prices": {"12 oz": 17.0, "2 lb": 40.8},
+    "description": "Caramel sweetness and smooth cocoa make this an easy everyday cup.",
+    "tasting_notes": ["Caramel", "Cocoa", "Red apple"],
+    "recommended_brew": "Drip or pour-over",
+    "roast": "Medium",
+    "origin": "Huila, Colombia"
   },
   {
     "sku": "HOUSE-ESPRESSO",
     "name": "House Espresso",
     "price": 16.0,
-    "description": "A balanced blend made for espresso and milk drinks. Whole bean, 12 oz.",
-    "roast": "Dark"
+    "size_prices": {"12 oz": 16.0, "2 lb": 38.4},
+    "description": "A balanced blend developed for espresso and milk-based drinks.",
+    "tasting_notes": ["Dark chocolate", "Toasted sugar", "Hazelnut"],
+    "recommended_brew": "Espresso or moka pot",
+    "roast": "Dark",
+    "origin": "House blend"
   },
   {
     "sku": "DECAF-COLOMBIA",
     "name": "Decaf Colombia",
     "price": 17.5,
-    "description": "Sugar cane decaffeinated with notes of toffee and orange. Whole bean, 12 oz.",
-    "roast": "Medium"
+    "size_prices": {"12 oz": 17.5, "2 lb": 42.0},
+    "description": "Sugar cane decaffeinated with a mellow sweetness and citrus finish.",
+    "tasting_notes": ["Toffee", "Orange", "Brown sugar"],
+    "recommended_brew": "Drip or espresso",
+    "roast": "Medium",
+    "origin": "Colombia"
+  },
+  {
+    "sku": "SUMATRA-MANDELING",
+    "name": "Sumatra Mandheling",
+    "price": 18.0,
+    "size_prices": {"12 oz": 18.0, "2 lb": 43.2},
+    "description": "A full-bodied, earthy cup with a long, chocolatey finish.",
+    "tasting_notes": ["Dark chocolate", "Cedar", "Spice"],
+    "recommended_brew": "French press",
+    "roast": "Dark",
+    "origin": "North Sumatra, Indonesia"
+  },
+  {
+    "sku": "GUATEMALA-ANTIGUA",
+    "name": "Guatemala Antigua",
+    "price": 18.0,
+    "size_prices": {"12 oz": 18.0, "2 lb": 43.2},
+    "description": "Cocoa and toasted almond meet a gentle, sweet citrus finish.",
+    "tasting_notes": ["Cocoa", "Toasted almond", "Citrus"],
+    "recommended_brew": "Pour-over or drip",
+    "roast": "Medium",
+    "origin": "Antigua, Guatemala"
+  },
+  {
+    "sku": "KENYA-AA",
+    "name": "Kenya AA",
+    "price": 19.0,
+    "size_prices": {"12 oz": 19.0, "2 lb": 45.6},
+    "description": "A lively cup with juicy fruit, sparkling citrus, and a clean finish.",
+    "tasting_notes": ["Blackcurrant", "Grapefruit", "Brown sugar"],
+    "recommended_brew": "Pour-over",
+    "roast": "Light",
+    "origin": "Kenya"
   }
 ]

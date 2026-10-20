@@ -14,6 +14,10 @@ A local first Coffee Store built as five independently runnable components: a pr
 | Notifications | Order update records | Its own SQLite database and Docker volume |
 | Frontend | Coffee browsing, ordering, order history, and updates | None; static web files served by Nginx |
 
+## Storefront shopping experience
+
+The catalog presents seven coffees with origin, tasting notes, and a recommended brew method. Shoppers can view an interactive 3D bag preview, choose a 12 oz or 2 lb bag and grind style, add multiple selections to a cart, adjust quantities, and review the total before placing orders. Bag-size prices are supplied by the Product Catalog and validated by the Order Service. The cart uses the existing order API and stock reservation flow; payment processing and customer accounts are not implemented.
+
 Each backend runs in a separate container. The frontend uses Nginx to route API calls to the backend containers. The browser only needs to reach the frontend on port 8080.
 
 ## Repository layout
@@ -34,9 +38,9 @@ Each service directory also contains its Dockerfile and Python dependencies. The
 
 | Workflow | Purpose |
 |---|---|
-| `.github/workflows/ci.yml` | Runs application tests, Helm validation, and local container image scans on pushes and pull requests. |
-| `.github/workflows/security.yml` | Scans history, dependencies, and configuration on pushes and pull requests. |
-| `.github/workflows/deploy-aws-dev.yml` | Manually verifies both checks for the dev commit, publishes scanned images to ECR, and deploys them to EKS. |
+| `.github/workflows/ci.yml` | Runs application tests and Helm validation; on `dev`, publishes scanned images to ECR and commits their immutable digests to the chart values Argo CD watches. |
+| `.github/workflows/security.yml` | Scans history, dependencies, and configuration on pushes and pull requests; the image publishing job waits for the matching `dev` security run. |
+| `.github/workflows/deploy-aws-dev.yml` | One-time/manual Argo CD configuration and deployment verification. It no longer deploys the app with Helm directly. |
 
 ## Local run
 
@@ -78,7 +82,7 @@ Open <http://localhost:8081>. Keep the port-forward command running while using 
 
 ## AWS development deployment
 
-The AWS deployment is separate from Docker Desktop. `Coffee Store CI` runs automatically on pushes and pull requests to `dev` and `main`: it tests the services, validates the Helm chart, and builds and scans all five images without AWS credentials. `Security checks` runs separately. To deploy, manually run `Deploy Coffee Store to EKS` from the `dev` branch. It requires successful CI and security push runs for that exact commit, rebuilds and scans the images, pushes them to ECR, and deploys their immutable digests with Helm. It then verifies the rollouts and frontend routes.
+The AWS delivery flow is separate from Docker Desktop. On pushes and pull requests to `dev` and `main`, `Coffee Store CI` tests the services and validates the chart; `Security checks` scans repository history and configuration. On a push to `dev`, CI waits for those checks, builds and scans all five images, pushes them to ECR through GitHub OIDC, and commits the digest-pinned image references to `helm/coffee-store/images.json`. The bot commit uses `[skip ci]` and `GITHUB_TOKEN` so it cannot start a release loop. Argo CD watches `dev` at `helm/coffee-store` and auto-syncs that values-file change. Run `Configure Coffee Store Argo CD` once from `dev` to configure the live Application to use the file and enable automated sync/self-heal; it checks rollouts and frontend routes. The `dev` GitHub Environment may pause the image-publishing job for its configured approval rule.
 
 Configure repository variables `AWS_REGION`, `AWS_ROLE_ARN`, `EKS_CLUSTER_NAME`, `PROJECT_NAME`, `ENVIRONMENT`, `ACM_CERTIFICATE_ARN`, `DOMAIN_NAME`, `ORDER_EVENT_BUS_NAME`, `ORDER_NOTIFICATION_QUEUE_URL`, `ORDER_NOTIFICATION_TOPIC_ARN`, `ORDER_SERVICE_ROLE_ARN`, `ORDER_DB_MIGRATOR_ROLE_ARN`, `INVENTORY_SERVICE_ROLE_ARN`, `NOTIFICATION_SERVICE_ROLE_ARN`, `ORDERS_DATABASE_HOST`, and `ORDERS_DATABASE_SECRET_ARN`. Terraform outputs provide the role ARNs, private database endpoint, and master-secret ARN; copy those non-password values into GitHub repository variables after applying infrastructure. The deploy role must trust this repository's GitHub Actions OIDC subject and allow ECR image pushes, `eks:DescribeCluster`, and Kubernetes access to the `coffee-store` namespace. Non-AWS pods do not mount Kubernetes API credentials; IRSA-enabled Order, Inventory, Notification, and migration pods receive the projected web-identity token required for their scoped roles.
 
@@ -128,7 +132,7 @@ flowchart LR
 
 The monitoring pipeline stores operational events. It does not store coffee orders or inventory in the monitoring DynamoDB table.
 
-The `Security checks` workflow runs Gitleaks on Git history, Checkov on configuration, and Trivy on dependencies and configuration for pushes and pull requests. Manual AWS deployment requires successful CI and security runs for the selected commit, then scans each rebuilt container image with Trivy before pushing it to ECR. A failing scan stops deployment; review and fix the finding rather than bypassing the gate.
+The `Security checks` workflow runs Gitleaks on Git history, Checkov on configuration, and Trivy on dependencies and configuration for pushes and pull requests. The `dev` image publishing job also scans every built container image with Trivy before pushing it to ECR. A failing check or scan stops publication, so Argo CD has no new digest to deploy.
 
 ## Local request flow
 

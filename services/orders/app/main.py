@@ -7,6 +7,7 @@ import time
 import uuid
 from contextlib import closing
 from datetime import datetime, timezone
+from typing import Literal
 
 import httpx
 import boto3
@@ -63,6 +64,8 @@ class CreateOrderRequest(BaseModel):
     customer_name: str = Field(min_length=1, max_length=100)
     sku: str = Field(min_length=1, max_length=80)
     quantity: int = Field(gt=0, le=20)
+    bag_size: Literal["12 oz", "2 lb"] = "12 oz"
+    grind: Literal["Whole bean", "Espresso", "Drip", "French press"] = "Whole bean"
 
 
 def connect():
@@ -102,10 +105,21 @@ def initialize_database():
                 product_name TEXT NOT NULL,
                 quantity INTEGER NOT NULL,
                 unit_price DOUBLE PRECISION NOT NULL,
+                bag_size TEXT NOT NULL DEFAULT '12 oz',
+                grind TEXT NOT NULL DEFAULT 'Whole bean',
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )"""
         )
+        if USING_POSTGRES:
+            execute(connection, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS bag_size TEXT NOT NULL DEFAULT '12 oz'")
+            execute(connection, "ALTER TABLE orders ADD COLUMN IF NOT EXISTS grind TEXT NOT NULL DEFAULT 'Whole bean'")
+        else:
+            columns = {row["name"] for row in execute(connection, "PRAGMA table_info(orders)").fetchall()}
+            if "bag_size" not in columns:
+                execute(connection, "ALTER TABLE orders ADD COLUMN bag_size TEXT NOT NULL DEFAULT '12 oz'")
+            if "grind" not in columns:
+                execute(connection, "ALTER TABLE orders ADD COLUMN grind TEXT NOT NULL DEFAULT 'Whole bean'")
         execute(connection,
             """CREATE TABLE IF NOT EXISTS event_outbox (
                 event_id TEXT PRIMARY KEY,
@@ -198,6 +212,10 @@ def create_order(request: CreateOrderRequest):
         raise HTTPException(status_code=503, detail="Product catalog could not validate this order")
 
     product = product_response.json()
+    size_prices = product.get("size_prices", {"12 oz": product["price"]})
+    unit_price = size_prices.get(request.bag_size)
+    if unit_price is None:
+        raise HTTPException(status_code=422, detail="This bag size is not available for the selected coffee")
 
     try:
         inventory_response = httpx.post(
@@ -221,7 +239,9 @@ def create_order(request: CreateOrderRequest):
         "sku": request.sku,
         "product_name": product["name"],
         "quantity": request.quantity,
-        "unit_price": product["price"],
+        "unit_price": unit_price,
+        "bag_size": request.bag_size,
+        "grind": request.grind,
         "status": "PLACED",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -233,8 +253,10 @@ def create_order(request: CreateOrderRequest):
         "sku": request.sku,
         "productName": product["name"],
         "quantity": request.quantity,
-        "unitPrice": product["price"],
-        "total": round(request.quantity * product["price"], 2),
+        "unitPrice": unit_price,
+        "bagSize": request.bag_size,
+        "grind": request.grind,
+        "total": round(request.quantity * unit_price, 2),
         "status": "PLACED",
         "createdAt": order["created_at"],
     }
@@ -243,11 +265,11 @@ def create_order(request: CreateOrderRequest):
         with closing(connect()) as connection:
             execute(connection,
                 """INSERT INTO orders
-                (order_id, customer_name, sku, product_name, quantity, unit_price, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (order_id, customer_name, sku, product_name, quantity, unit_price, bag_size, grind, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 tuple(order[key] for key in (
                     "order_id", "customer_name", "sku", "product_name", "quantity",
-                    "unit_price", "status", "created_at",
+                    "unit_price", "bag_size", "grind", "status", "created_at",
                 )),
             )
             if EVENT_BUS_NAME:
@@ -274,7 +296,10 @@ def create_order(request: CreateOrderRequest):
                 json={
                     "order_id": order_id,
                     "customer_name": request.customer_name,
-                    "message": f"Your order for {request.quantity} x {product['name']} was placed.",
+                    "message": (
+                        f"Your order for {request.quantity} x {product['name']} "
+                        f"({request.bag_size}, {request.grind}) was placed."
+                    ),
                 },
                 timeout=2,
             )
@@ -282,7 +307,7 @@ def create_order(request: CreateOrderRequest):
         except httpx.HTTPError:
             logger.warning("Order %s was placed, but notification delivery is currently unavailable", order_id)
 
-    return {**order, "total": round(request.quantity * product["price"], 2)}
+    return {**order, "total": round(request.quantity * unit_price, 2)}
 
 
 @app.get("/orders")

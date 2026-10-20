@@ -6,12 +6,13 @@
     <meta name="theme-color" content="#f5f0e8" />
     <title>Roast & Relay Coffee</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/product-effects.css" />
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Roast and Relay home"><span class="brand-mark">R</span> Roast <span>&amp;</span> Relay</a>
-      <nav><a href="#coffee">Coffee</a><a href="#orders">Your orders</a></nav>
+      <nav><a href="#coffee">Coffee</a><a href="#cart">Cart <span id="cart-count">0</span></a><a href="#orders">Your orders</a></nav>
       <span class="header-note">Small batches. Good mornings.</span>
     </header>
 
@@ -29,16 +30,13 @@
         <div id="product-grid" class="product-grid" aria-live="polite"></div>
       </section>
 
-      <section class="order-section">
-        <div class="order-copy"><p class="eyebrow">YOUR NEXT GOOD MORNING</p><h2>Place an order</h2><p>Choose a coffee above, set the quantity, and we’ll reserve it from current stock.</p></div>
+      <section id="cart" class="order-section">
+        <div class="order-copy"><p class="eyebrow">YOUR NEXT GOOD MORNING</p><h2>Your coffee bag</h2><p>Review your selections, choose how you want each coffee ground, then place your order.</p><div class="cart-total"><span>Cart total</span><strong id="cart-total">$0.00</strong></div></div>
         <form id="order-form" class="order-form">
+          <div id="cart-lines" class="cart-lines" aria-live="polite"><p class="cart-empty">Your cart is empty. Add a coffee to get started.</p></div>
           <label for="customer-name">Name</label>
           <input id="customer-name" name="customer_name" autocomplete="name" required maxlength="100" placeholder="Your name" />
-          <label for="coffee-choice">Coffee</label>
-          <select id="coffee-choice" name="sku" required></select>
-          <label for="quantity">Bags</label>
-          <input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required />
-          <button class="button button-light" type="submit">Place order</button>
+          <button id="checkout-button" class="button button-light" type="submit" disabled>Place order</button>
           <p id="order-result" class="form-result" role="status"></p>
         </form>
       </section>
@@ -53,6 +51,22 @@
         <div id="notification-list" class="record-list"><p class="muted">Loading notifications…</p></div>
       </section>
     </main>
+
+    <dialog id="product-dialog" class="product-dialog" aria-labelledby="quick-view-name">
+      <button id="close-product-dialog" class="dialog-close" type="button" aria-label="Close coffee details">×</button>
+      <div class="quick-view-layout">
+        <div class="quick-view-art" id="quick-view-art"></div>
+        <div class="quick-view-copy">
+          <p class="eyebrow" id="quick-view-roast"></p>
+          <h2 id="quick-view-name"></h2>
+          <p class="product-origin" id="quick-view-origin"></p>
+          <p id="quick-view-description"></p>
+          <p class="quick-view-notes"><strong>Tasting notes</strong><span id="quick-view-tasting"></span></p>
+          <p class="quick-view-brew"><strong>Best brewed as</strong><span id="quick-view-brew"></span></p>
+          <p class="quick-view-price" id="quick-view-price"></p>
+        </div>
+      </div>
+    </dialog>
 
     <footer><a class="brand" href="/"><span class="brand-mark">R</span> Roast <span>&amp;</span> Relay</a><p>Roasted with care. Built for your daily ritual.</p></footer>
   </body>

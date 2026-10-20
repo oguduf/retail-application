@@ -12,8 +12,12 @@ class Product(BaseModel):
     sku: str
     name: str
     price: float
+    size_prices: dict[str, float]
     description: str
+    tasting_notes: list[str]
+    recommended_brew: str
     roast: str
+    origin: str
 
 
 PRODUCTS_FILE = Path(__file__).parent.parent / "data" / "products.json"
