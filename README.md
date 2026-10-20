@@ -14,6 +14,10 @@ A local first Coffee Store built as five independently runnable components: a pr
 | Notifications | Order update records | Its own SQLite database and Docker volume |
 | Frontend | Coffee browsing, ordering, order history, and updates | None; static web files served by Nginx |
 
+## Storefront shopping experience
+
+The catalog presents seven coffees with origin, tasting notes, and a recommended brew method. Shoppers can view an interactive 3D bag preview, choose a 12 oz or 2 lb bag and grind style, add multiple selections to a cart, adjust quantities, and review the total before placing orders. Bag-size prices are supplied by the Product Catalog and validated by the Order Service. The cart uses the existing order API and stock reservation flow; payment processing and customer accounts are not implemented.
+
 Each backend runs in a separate container. The frontend uses Nginx to route API calls to the backend containers. The browser only needs to reach the frontend on port 8080.
 
 ## Repository layout
